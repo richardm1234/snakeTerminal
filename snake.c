@@ -16,12 +16,15 @@ const Point middle = {WIDTH / 2, HEIGHT / 2};
 
 
 
-void foodEat(Point *snake, Point *food, int *len, int *score) {
+void eat(Point *snake, Point *food, int *len, int *score) {
     if (snake[0].x == food->x && snake[0].y == food->y) {
             (*len)++;
             (*score)++;
             food->x = (rand() % (WIDTH - 3)) + 1;
             food->y = (rand() % (HEIGHT - 3)) + 1;
+            while (food->x == 0 || food->y == 0) {
+
+            }
 
         }
 
@@ -39,6 +42,8 @@ void draw(Point *snake, Point *food, int len, int score, int *refresh) {
         mvprintw(y, WIDTH-1, "#");
     }
     mvprintw(0, WIDTH + 1, "Score: %d\n", score);
+    mvprintw(1, WIDTH + 1, "WASD/Arrows to move\n");
+    mvprintw(2, WIDTH + 1, "Press q to quit\n");
     for (int i = 0; i < len; i++) {
         if (i == 0) {
             mvaddch(snake[i].y, snake[i].x, '@');
@@ -127,11 +132,25 @@ int main(int argc, char *argv[]) {
         ch = getch();
         //timeout();
         switch (ch) {
-            case KEY_UP: dx = 0; dy = -1; break;
-            case KEY_DOWN: dx = 0; dy = 1; break;
-            case KEY_LEFT: dx = -1; dy = 0; break;
-            case KEY_RIGHT: dx = 1; dy = 0; break;
-            case 'q': endwin(); return 0;
+            case 'w':
+            case KEY_UP: 
+                dx = 0; dy = -1; 
+                break;
+            case 's':
+            case KEY_DOWN: 
+                dx = 0; dy = 1; 
+                break;
+            case 'a':
+            case KEY_LEFT: 
+                dx = -1; dy = 0; 
+                break;
+            case 'd':    
+            case KEY_RIGHT: 
+                dx = 1; dy = 0; 
+                break;
+            case 'q': 
+                endwin(); 
+                return 0;
         }
 
         //Move snake
@@ -149,20 +168,17 @@ int main(int argc, char *argv[]) {
             if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) goto game_is_over;
         }
 
-        foodEat(snake, &food, &snakeLength, &score);
+        eat(snake, &food, &snakeLength, &score);
         draw(snake, &food, snakeLength, score, &refresh);
         
 
         usleep(100000); // Control speed
     }
-
+    
     game_is_over:
     gameOver(score, snakeLength);
-    while (getch() != 'q') {
-        
-    }
+    while (getch() != 'q') {};
     endwin();
-    
     leaderboard(score, path);
     printf("Endscore : %d\n", score);
     return 0;

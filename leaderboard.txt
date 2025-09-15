@@ -1,2 +1,6 @@
-
 Richard 18
+Richard 10
+Richard 1
+Richard 5
+R 4
+R 2
