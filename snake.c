@@ -29,17 +29,17 @@ void eat(Point *snake, Point *food, int *len, int *score) {
             (*len)++;
             (*score)++;
             do {
-                food->x = 1 + rand() % (WIDTH - 2);
-                food->y = 1 + rand() % (HEIGHT - 2);
+                food->x = 1 + rand() % (WIDTH - 3);
+                food->y = 1 + rand() % (HEIGHT - 3);
             } while (badLocation(snake, food, *len));
 
         }
 
 }
 
-void draw(Point *snake, Point *food, int len, int score, int *refresh) {
+void draw(Point *snake, Point *food, int len, int score) {
 
-    clear();
+    erase();
     for (int x = 0; x < WIDTH; x++) {
         mvprintw(0, x, "#");
         mvprintw(HEIGHT-1, x, "#");
@@ -60,6 +60,7 @@ void draw(Point *snake, Point *food, int len, int score, int *refresh) {
     }
     mvaddch(food->y, food->x, 'F');
     refresh();
+    
 }
 
 void gameOver(int score, int len) {
@@ -114,7 +115,7 @@ int main(int argc, char *argv[]) {
     } else {
         path = "leaderboard.txt";
     }
-    int refresh = 0;
+    
     int score = 0;
     
     // Snake start
@@ -172,7 +173,7 @@ int main(int argc, char *argv[]) {
         }
 
         eat(snake, &food, &snakeLength, &score);
-        draw(snake, &food, snakeLength, score, &refresh);
+        draw(snake, &food, snakeLength, score);
         
 
         usleep(100000); // Control speed
