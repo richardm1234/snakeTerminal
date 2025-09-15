@@ -20,10 +20,11 @@ void eat(Point *snake, Point *food, int *len, int *score) {
     if (snake[0].x == food->x && snake[0].y == food->y) {
             (*len)++;
             (*score)++;
-            food->x = (rand() % (WIDTH - 3)) + 1;
-            food->y = (rand() % (HEIGHT - 3)) + 1;
+            food->x = (rand() % WIDTH);
+            food->y = (rand() % HEIGHT);
             while (food->x == 0 || food->y == 0) {
-
+                food->x = (rand() % (WIDTH - 1));
+                food->y = (rand() % (HEIGHT - 1));
             }
 
         }

@@ -1,6 +1,2 @@
-Richard 18
-Richard 10
-Richard 1
-Richard 5
-R 4
-R 2
+Richard 0
+Richard 30
