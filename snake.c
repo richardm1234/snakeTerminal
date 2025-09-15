@@ -14,7 +14,6 @@ typedef struct {
 
 const Point middle = {WIDTH / 2, HEIGHT / 2};
 
-
 int badLocation(Point *snake, Point *food, int len) {
     for (int i = 0; i < len; i++) {
         if (food->x == snake[i].x && food->y == snake[i].y) {
@@ -26,19 +25,16 @@ int badLocation(Point *snake, Point *food, int len) {
 
 void eat(Point *snake, Point *food, int *len, int *score) {
     if (snake[0].x == food->x && snake[0].y == food->y) {
-            (*len)++;
-            (*score)++;
-            do {
-                food->x = 1 + rand() % (WIDTH - 3);
-                food->y = 1 + rand() % (HEIGHT - 3);
-            } while (badLocation(snake, food, *len));
-
-        }
-
+        (*len)++;
+        (*score)++;
+        do {
+            food->x = 1 + rand() % (WIDTH - 3);
+            food->y = 1 + rand() % (HEIGHT - 3);
+        } while (badLocation(snake, food, *len));
+    }
 }
 
 void draw(Point *snake, Point *food, int len, int score) {
-
     erase();
     for (int x = 0; x < WIDTH; x++) {
         mvprintw(0, x, "#");
@@ -60,11 +56,10 @@ void draw(Point *snake, Point *food, int len, int score) {
     }
     mvaddch(food->y, food->x, 'F');
     refresh();
-    
 }
 
 void gameOver(int score, int len) {
-    clear();
+    erase();
     mvprintw(HEIGHT / 2, WIDTH / 4, "You got a score of %d and your snake was %d units long\n", score, len);
     mvprintw(HEIGHT - 1, 0, "Press q to quit\n");
     refresh();
@@ -86,7 +81,6 @@ int leaderboard(int score, const char *path) {
         fgets(name, sizeof(name), stdin); 
     }
     
-
     name[strcspn(name, "\n")] = '\0';
 
     snprintf(sc, sizeof(sc), "%d", score);
@@ -109,32 +103,29 @@ int main(int argc, char *argv[]) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
 
+    int score = 0;
+    int collision = 0;
     const char *path;
     if (argc == 2) {
         path = argv[1];
     } else {
         path = "leaderboard.txt";
     }
-    
-    int score = 0;
-    
-    // Snake start
+
+    // Snake
     Point snake[100];
     int snakeLength = 1;
     snake[0].x = middle.x;
     snake[0].y = middle.y;
+    int dx = 1, dy = 0;
 
     // Food
     Point food = { rand() % WIDTH, rand() % HEIGHT};
-
-    // Snake moves right;
-    int dx = 1, dy = 0;
     
     int ch;
-    while (1) {
+    while (!collision) {
         // Input
         ch = getch();
-        //timeout();
         switch (ch) {
             case 'w':
             case KEY_UP: 
@@ -169,21 +160,18 @@ int main(int argc, char *argv[]) {
             break;
         }
         for (int i = 1; i < snakeLength; i++) {
-            if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) goto game_is_over;
+            if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) collision = 1;
         }
 
         eat(snake, &food, &snakeLength, &score);
         draw(snake, &food, snakeLength, score);
-        
-
         usleep(100000); // Control speed
     }
     
-    game_is_over:
     gameOver(score, snakeLength);
-    while (getch() != 'q') {};
+    while (getch() != 'q');
     endwin();
     leaderboard(score, path);
-    printf("Endscore : %d\n", score);
+    printf("Score : %d\n", score);
     return 0;
 }
