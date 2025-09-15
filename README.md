@@ -5,5 +5,5 @@ I still have some issues and want to add some extra funtionality to it.
 To run it in your terminal:
 ``` Bash
 make
-./snake
+./snake leaderboard.txt
 ```
