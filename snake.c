@@ -61,8 +61,8 @@ void gameOver(int score, int len) {
     refresh();
 }
 
-int leaderboard(int score) {
-    FILE *scoring = fopen("leaderboard.txt", "a");
+int leaderboard(int score, const char *path) {
+    FILE *scoring = fopen(path, "a");
     if (!scoring) {
         fprintf(stderr, "File couldn't be opened\n");
         return EXIT_FAILURE;
@@ -92,7 +92,7 @@ int leaderboard(int score) {
     return EXIT_SUCCESS;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     srand(time(NULL));
     initscr();
     noecho();
@@ -100,6 +100,12 @@ int main() {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
 
+    const char *path;
+    if (argc == 2) {
+        path = argv[1];
+    } else {
+        path = "leaderboard.txt";
+    }
     int refresh = 0;
     int score = 0;
     
@@ -157,7 +163,7 @@ int main() {
     }
     endwin();
     
-    leaderboard(score);
+    leaderboard(score, path);
     printf("Endscore : %d\n", score);
     return 0;
 }
