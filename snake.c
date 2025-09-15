@@ -15,17 +15,23 @@ typedef struct {
 const Point middle = {WIDTH / 2, HEIGHT / 2};
 
 
+int badLocation(Point *snake, Point *food, int len) {
+    for (int i = 0; i < len; i++) {
+        if (food->x == snake[i].x && food->y == snake[i].y) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 void eat(Point *snake, Point *food, int *len, int *score) {
     if (snake[0].x == food->x && snake[0].y == food->y) {
             (*len)++;
             (*score)++;
-            food->x = (rand() % WIDTH);
-            food->y = (rand() % HEIGHT);
-            while (food->x == 0 || food->y == 0) {
+            do {
                 food->x = (rand() % (WIDTH - 1));
                 food->y = (rand() % (HEIGHT - 1));
-            }
+            } while (badLocation(snake, food, *len));
 
         }
 
