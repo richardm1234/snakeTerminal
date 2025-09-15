@@ -59,11 +59,7 @@ void draw(Point *snake, Point *food, int len, int score, int *refresh) {
         }
     }
     mvaddch(food->y, food->x, 'F');
-    if (!refresh) {
-        refresh();
-    } else {
-        (*refresh) = !(*refresh);
-    }
+    refresh();
 }
 
 void gameOver(int score, int len) {
