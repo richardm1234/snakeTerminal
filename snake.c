@@ -29,8 +29,8 @@ void eat(Point *snake, Point *food, int *len, int *score) {
             (*len)++;
             (*score)++;
             do {
-                food->x = (rand() % (WIDTH - 1));
-                food->y = (rand() % (HEIGHT - 1));
+                food->x = 1 + rand() % (WIDTH - 2);
+                food->y = 1 + rand() % (HEIGHT - 2);
             } while (badLocation(snake, food, *len));
 
         }
@@ -59,7 +59,7 @@ void draw(Point *snake, Point *food, int len, int score, int *refresh) {
         }
     }
     mvaddch(food->y, food->x, 'F');
-    if (refresh) {
+    if (!refresh) {
         refresh();
     } else {
         (*refresh) = !(*refresh);
