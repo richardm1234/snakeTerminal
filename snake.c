@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
     int dx = 1, dy = 0;
 
     // Food
-    Point food = { rand() % WIDTH, rand() % HEIGHT};
+    Point food = { 1 + rand() % (WIDTH - 3), 1 + rand() % (HEIGHT - 3)};
     
     int ch;
     while (!collision) {
