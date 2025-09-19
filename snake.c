@@ -12,8 +12,6 @@ typedef struct {
     int x, y;
 } Point;
 
-const Point middle = {WIDTH / 2, HEIGHT / 2};
-
 int badLocation(Point *snake, Point *food, int len) {
     for (int i = 0; i < len; i++) {
         if (food->x == snake[i].x && food->y == snake[i].y) {
@@ -34,29 +32,7 @@ void eat(Point *snake, Point *food, int *len, int *score) {
     }
 }
 
-void draw(Point *snake, Point *food, int len, int score) {
-    erase();
-    for (int x = 0; x < WIDTH; x++) {
-        mvprintw(0, x, "#");
-        mvprintw(HEIGHT-1, x, "#");
-    }
-    for (int y = 0; y < HEIGHT; y++) {
-        mvprintw(y, 0, "#");
-        mvprintw(y, WIDTH-1, "#");
-    }
-    mvprintw(0, WIDTH + 1, "Score: %d\n", score);
-    mvprintw(1, WIDTH + 1, "WASD/Arrows to move\n");
-    mvprintw(2, WIDTH + 1, "Press q to quit\n");
-    for (int i = 0; i < len; i++) {
-        if (i == 0) {
-            mvaddch(snake[i].y, snake[i].x, '@');
-        } else {
-            mvaddch(snake[i].y, snake[i].x, 'O');
-        }
-    }
-    mvaddch(food->y, food->x, 'F');
-    refresh();
-}
+
 
 void gameOver(int score, int len) {
     erase();
@@ -95,6 +71,71 @@ int leaderboard(int score, const char *path) {
     return EXIT_SUCCESS;
 }
 
+/* Draw */
+
+void drawBorder(int score) {
+    erase();
+    for (int x = 0; x < WIDTH; x++) {
+        mvaddch(0, x, '#');
+        mvaddch(HEIGHT-1, x, '#');
+    }
+    for (int y = 0; y < HEIGHT; y++) {
+        mvaddch(y, 0, '#');
+        mvaddch(y, WIDTH-1, '#');
+    }
+    mvprintw(0, WIDTH + 1, "Score: %d", score);
+    mvprintw(1, WIDTH + 1, "WASD/ARROWS to move");
+    mvprintw(2, WIDTH + 1, "Press q to quit");
+    refresh();
+}
+
+int drawStart(Point *snake, Point *food) {
+    erase();
+    drawBorder(0);
+    mvaddch(snake[0].y, snake[0].x, '@');
+    mvaddch(food->y, food->x, 'F');
+    mvprintw(HEIGHT + 1, 1, "WASD/ARROWS to start");
+    mvprintw(HEIGHT + 2, 1, "Other key -> move right");
+    refresh();
+
+    // temporarily block until a key is pressed
+    nodelay(stdscr, FALSE);
+    int ch = getch();
+    switch (ch) {
+        case 'w':
+        case KEY_UP: 
+            return 'w';
+        case 's':
+        case KEY_DOWN: 
+            return 's';
+        case 'a':
+        case KEY_LEFT: 
+            return 'a';
+        case 'd':    
+        case KEY_RIGHT: 
+            return 'd';
+        case 'q': 
+            return 'q';
+        default:
+            return 'd';
+    }
+        
+}
+
+void draw(Point *snake, Point *food, int len, int score) {
+    erase();
+    drawBorder(score);
+    for (int i = 0; i < len; i++) {
+        if (i == 0) {
+            mvaddch(snake[i].y, snake[i].x, '@');
+        } else {
+            mvaddch(snake[i].y, snake[i].x, 'O');
+        }
+    }
+    mvaddch(food->y, food->x, 'F');
+    refresh();
+}
+
 int main(int argc, char *argv[]) {
     srand(time(NULL));
     initscr();
@@ -115,17 +156,24 @@ int main(int argc, char *argv[]) {
     // Snake
     Point snake[100];
     int snakeLength = 1;
-    snake[0].x = middle.x;
-    snake[0].y = middle.y;
-    int dx = 1, dy = 0;
+    snake[0].x = 1 + rand() % (WIDTH - 3);
+    snake[0].y = 1 + rand() % (HEIGHT - 3);
+    int dx = 0, dy = 0;
 
     // Food
     Point food = { 1 + rand() % (WIDTH - 3), 1 + rand() % (HEIGHT - 3)};
     
-    int ch;
+    int ch = drawStart(snake, &food);
+    
+    nodelay(stdscr, TRUE);
+
     while (!collision) {
+        
         // Input
-        ch = getch();
+        int newCh = getch();
+        if (newCh != ERR) {
+            ch = newCh;
+        }
         switch (ch) {
             case 'w':
             case KEY_UP: 
