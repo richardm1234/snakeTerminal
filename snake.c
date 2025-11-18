@@ -86,7 +86,6 @@ void drawBorder(int score) {
     mvprintw(0, WIDTH + 1, "Score: %d", score);
     mvprintw(1, WIDTH + 1, "WASD/ARROWS to move");
     mvprintw(2, WIDTH + 1, "Press q to quit");
-    refresh();
 }
 
 int drawStart(Point *snake, Point *food) {
@@ -125,12 +124,9 @@ int drawStart(Point *snake, Point *food) {
 void draw(Point *snake, Point *food, int len, int score) {
     erase();
     drawBorder(score);
-    for (int i = 0; i < len; i++) {
-        if (i == 0) {
-            mvaddch(snake[i].y, snake[i].x, '@');
-        } else {
-            mvaddch(snake[i].y, snake[i].x, 'O');
-        }
+    mvaddch(snake[0].y, snake[0].x, '@');
+    for (int i = 1; i < len; i++) {
+        mvaddch(snake[i].y, snake[i].x, 'O');
     }
     mvaddch(food->y, food->x, 'F');
     refresh();
