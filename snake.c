@@ -8,6 +8,7 @@
 #define WIDTH 40
 #define HEIGHT 20
 
+
 typedef struct {
     int x, y;
 } Point;
@@ -74,7 +75,6 @@ int leaderboard(int score, const char *path) {
 /* Draw */
 
 void drawBorder(int score) {
-    erase();
     for (int x = 0; x < WIDTH; x++) {
         mvaddch(0, x, '#');
         mvaddch(HEIGHT-1, x, '#');
