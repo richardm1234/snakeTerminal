@@ -24,6 +24,7 @@ int badLocation(Point *snake, Point *food, int len) {
 
 void eat(Point *snake, Point *food, int *len, int *score) {
     if (snake[0].x == food->x && snake[0].y == food->y) {
+        snake[*len] = snake[*len - 1]; // to avoid reading garbage
         (*len)++;
         (*score)++;
         do {
@@ -45,28 +46,34 @@ void gameOver(int score, int len) {
 int leaderboard(int score, const char *path) {
     FILE *scoring = fopen(path, "a");
     if (!scoring) {
-        fprintf(stderr, "File couldn't be opened\n");
+        perror( "File couldn't be opened\n");
         return EXIT_FAILURE;
     }
     char name[30];
-    char sc[30];
-    char line[100];
+    char line[128];
     printf("Enter name:\n");
-    fgets(name, sizeof(name), stdin);
-    while (*name == '\0' || *name == '\n') {
-        printf("Enter a real name:\n");
-        fgets(name, sizeof(name), stdin); 
+    if (!fgets(name, sizeof(name), stdin)) {
+        fprintf(stderr, "Input error\n");
+        fclose(scoring);
+        return EXIT_FAILURE;
     }
     
     name[strcspn(name, "\n")] = '\0';
+    while (name[0] == '\0') {
+        printf("Enter a real name:\n");
+        if (!fgets(name, sizeof(name), stdin)) {
+            fprintf(stderr, "Input error\n");
+            fclose(scoring);
+            return EXIT_FAILURE;
+        }
+        name[strcspn(name, "\n")] = '\0';
+    }
+    
 
-    snprintf(sc, sizeof(sc), "%d", score);
-    snprintf(line, sizeof(line), "%s %s\n", name, sc);
+    snprintf(line, sizeof(line), "%s %d\n", name, score);
 
-    const size_t length = strlen(line);
-    size_t write = fwrite(line, 1, length, scoring);
-    if (write != length) {
-        perror("Error writing into file\n");
+    if (fputs(line, scoring) == EOF) {
+        perror("Error writing to file");
     }
     fclose(scoring);
     return EXIT_SUCCESS;
@@ -213,7 +220,10 @@ int main(int argc, char *argv[]) {
     }
     
     gameOver(score, snakeLength);
-    while (getch() != 'q');
+    nodelay(stdscr, false);
+    while (getch() != 'q') {
+
+    }
     endwin();
     leaderboard(score, path);
     printf("Score : %d\n", score);
