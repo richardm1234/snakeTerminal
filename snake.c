@@ -5,8 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#define WIDTH 40
-#define HEIGHT 20
+#define WIDTH 40 // x
+#define HEIGHT 20 // y
 
 
 typedef struct {
@@ -19,6 +19,9 @@ int badLocation(Point *snake, Point *food, int len) {
             return 1;
         }
     }
+    if (food->x == 0 || food->x == WIDTH-1 || food->y == 0 || food->y == HEIGHT-1) {
+        return 1;
+    }
     return 0;
 }
 
@@ -28,8 +31,8 @@ void eat(Point *snake, Point *food, int *len, int *score) {
         (*len)++;
         (*score)++;
         do {
-            food->x = 1 + rand() % (WIDTH - 3);
-            food->y = 1 + rand() % (HEIGHT - 3);
+            food->x =  rand() % WIDTH;
+            food->y =  rand() % HEIGHT;
         } while (badLocation(snake, food, *len));
     }
 }
@@ -159,12 +162,17 @@ int main(int argc, char *argv[]) {
     // Snake
     Point snake[100];
     int snakeLength = 1;
-    snake[0].x = 1 + rand() % (WIDTH - 3);
-    snake[0].y = 1 + rand() % (HEIGHT - 3);
+    snake[0].x = 1 + rand() % (WIDTH - 2);
+    snake[0].y = 1 + rand() % (HEIGHT - 2);
     int dx = 0, dy = 0;
 
     // Food
-    Point food = { 1 + rand() % (WIDTH - 3), 1 + rand() % (HEIGHT - 3)};
+    Point food = {  rand() % WIDTH, rand() % HEIGHT};
+    // Catching badLocation instead of making food placement more complicated
+    while (badLocation(snake, &food, snakeLength)) {
+        food.x =  rand() % WIDTH;
+        food.y =  rand() % HEIGHT;
+    }
     
     int ch = drawStart(snake, &food);
     
