@@ -198,15 +198,19 @@ void draw(Point *snake, Point *food, int len, int score) {
 }
 
 int main(int argc, char *argv[]) {
+    // SDL
     srand(time(NULL));
     initscr();
     noecho();
     curs_set(false);
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
+
+    // game variables
     int difficulty = LIGHT;
     int score = 0;
     int collision = 0;
+    
     const char *path;
     if (argc == 2) {
         path = argv[1];
@@ -223,11 +227,12 @@ int main(int argc, char *argv[]) {
 
     // Food
     Point food = {  rand() % WIDTH, rand() % HEIGHT};
-    // Catching badLocation instead of making food placement more complicated
+
     while (badLocation(snake, &food, snakeLength)) {
         food.x =  rand() % WIDTH;
         food.y =  rand() % HEIGHT;
     }
+
     difficulty = drawMenu();
     if (difficulty == -1) {
         endwin();
@@ -286,14 +291,11 @@ int main(int argc, char *argv[]) {
 
         eat(snake, &food, &snakeLength, &score);
         draw(snake, &food, snakeLength, score);
-        usleep(difficulty); // Control speed
+        usleep(difficulty);
     }
     
     gameOver(score, snakeLength);
     nodelay(stdscr, false);
-    //while (getch() != 'q') {
-//
-  //  }
 
     endwin();
     leaderboard(score, path);
