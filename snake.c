@@ -7,7 +7,7 @@
 
 #define WIDTH 40 // x
 #define HEIGHT 20 // y
-
+#define DELAY 75000 // controls speed, 50.000 - 100.000 is an acceptable range
 
 typedef struct {
     int x, y;
@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
 
         eat(snake, &food, &snakeLength, &score);
         draw(snake, &food, snakeLength, score);
-        usleep(100000); // Control speed
+        usleep(DELAY); // Control speed
     }
     
     gameOver(score, snakeLength);
