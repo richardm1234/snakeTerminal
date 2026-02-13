@@ -7,11 +7,17 @@
 
 #define WIDTH 40 // x
 #define HEIGHT 20 // y
-#define DELAY 75000 // controls speed, 50.000 - 100.000 is an acceptable range
+
 
 typedef struct {
     int x, y;
 } Point;
+
+enum Difficulty {
+    LIGHT = 100000,
+    MEDIUM = 75000,
+    HARD = 50000
+};
 
 int badLocation(Point *snake, Point *food, int len) {
     for (int i = 0; i < len; i++) {
@@ -84,6 +90,58 @@ int leaderboard(int score, const char *path) {
 
 /* Draw */
 
+int drawMenu() {
+    mvprintw(0, 0, "################ ##     #       ##  #   #  #############");
+    mvprintw(1, 0, "#                # #    #      #  # #  #   #            ");
+    mvprintw(2, 0, "#                #  #   #     #   # # #    #            ");
+    mvprintw(3, 0, "################ #   #  #    #    # # #    #############");
+    mvprintw(4, 0, "               # #    # #   ####### #  #   #            ");
+    mvprintw(5, 0, "               # #     ##  #      # #   #  #            ");
+    mvprintw(6, 0, "################ #      # #       # #    # #############");
+    
+    mvprintw(8, 0, "WELCOME TO SNAKE");
+    mvprintw(10, 0, "Select difficulty:");
+    mvprintw(11, 0, "Light(1)");
+    mvprintw(12, 0, "Medium(2)");
+    mvprintw(13, 0, "Hard(3)");
+    refresh();
+    nodelay(stdscr, FALSE);
+    int ch = getch();
+    switch (ch) {
+        case '1':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Light");
+            refresh();
+            usleep(1000000);
+            return LIGHT;
+        case '2':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Medium");
+            refresh();
+            usleep(1000000);
+            return MEDIUM;
+        case '3':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Hard");
+            refresh();
+            usleep(1000000);
+            return HARD;
+        case 'q':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Exited game");
+            refresh();
+            usleep(1000000);
+            return -1;
+        default:
+            erase();
+            mvprintw(HEIGHT / 2, 0, "No selection, default: Light");
+            refresh();
+            usleep(1000000);
+            return LIGHT;    
+    }
+    
+}
+
 void drawBorder(int score) {
     for (int x = 0; x < WIDTH; x++) {
         mvaddch(0, x, '#');
@@ -103,12 +161,9 @@ int drawStart(Point *snake, Point *food) {
     drawBorder(0);
     mvaddch(snake[0].y, snake[0].x, '@');
     mvaddch(food->y, food->x, 'F');
-    mvprintw(HEIGHT + 1, 1, "WASD/ARROWS to start");
-    mvprintw(HEIGHT + 2, 1, "Other key -> move right");
     refresh();
 
     // temporarily block until a key is pressed
-    nodelay(stdscr, FALSE);
     int ch = getch();
     switch (ch) {
         case 'w':
@@ -149,7 +204,7 @@ int main(int argc, char *argv[]) {
     curs_set(false);
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
-
+    int difficulty = LIGHT;
     int score = 0;
     int collision = 0;
     const char *path;
@@ -173,7 +228,13 @@ int main(int argc, char *argv[]) {
         food.x =  rand() % WIDTH;
         food.y =  rand() % HEIGHT;
     }
-    
+    difficulty = drawMenu();
+    if (difficulty == -1) {
+        endwin();
+        printf("Thanks for not playing\n");
+        return 0;
+    }
+
     int ch = drawStart(snake, &food);
     
     nodelay(stdscr, TRUE);
@@ -203,7 +264,8 @@ int main(int argc, char *argv[]) {
                 dx = 1; dy = 0; 
                 break;
             case 'q': 
-                endwin(); 
+                endwin();
+                printf("Thanks for playing\n"); 
                 return 0;
         }
 
@@ -224,16 +286,19 @@ int main(int argc, char *argv[]) {
 
         eat(snake, &food, &snakeLength, &score);
         draw(snake, &food, snakeLength, score);
-        usleep(DELAY); // Control speed
+        usleep(difficulty); // Control speed
     }
     
     gameOver(score, snakeLength);
     nodelay(stdscr, false);
-    while (getch() != 'q') {
+    //while (getch() != 'q') {
+//
+  //  }
 
-    }
     endwin();
     leaderboard(score, path);
     printf("Score : %d\n", score);
+    printf("Thanks for playing\n");
+
     return 0;
 }
