@@ -197,7 +197,7 @@ void draw(Point *snake, Point *food, int len, int score) {
 }
 
 int main(int argc, char *argv[]) {
-    // SDL
+
     srand(time(NULL));
     initscr();
     noecho();
