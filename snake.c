@@ -48,7 +48,6 @@ void eat(Point *snake, Point *food, int *len, int *score) {
 void gameOver(int score, int len) {
     erase();
     mvprintw(HEIGHT / 2, WIDTH / 4, "You got a score of %d and your snake was %d units long\n", score, len);
-    mvprintw(HEIGHT - 1, 0, "Press q to quit\n");
     refresh();
 }
 
@@ -296,7 +295,7 @@ int main(int argc, char *argv[]) {
     
     gameOver(score, snakeLength);
     nodelay(stdscr, false);
-
+    usleep(1500000);
     endwin();
     leaderboard(score, path);
     printf("Score : %d\n", score);
