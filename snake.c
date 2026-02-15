@@ -90,13 +90,13 @@ int leaderboard(int score, const char *path) {
 /* Draw */
 
 int drawMenu() {
-    mvprintw(0, 0, "################ ##     #       ##  #   #  #############");
-    mvprintw(1, 0, "#                # #    #      #  # #  #   #            ");
-    mvprintw(2, 0, "#                #  #   #     #   # # #    #            ");
-    mvprintw(3, 0, "################ #   #  #    #    # # #    #############");
-    mvprintw(4, 0, "               # #    # #   ####### #  #   #            ");
-    mvprintw(5, 0, "               # #     ##  #      # #   #  #            ");
-    mvprintw(6, 0, "################ #      # #       # #    # #############");
+    mvprintw(0, 0, "####### #     #       # #     # #######");
+    mvprintw(1, 0, "#       ##    #      ## #    #  #      ");
+    mvprintw(2, 0, "#       # #   #     # # #   #   #      ");
+    mvprintw(3, 0, "####### #  #  #    #  # ####    #######");
+    mvprintw(4, 0, "      # #   # #   ##### #   #   #      ");
+    mvprintw(5, 0, "      # #    ##  #    # #    #  #      ");
+    mvprintw(6, 0, "####### #     # #     # #     # #######");
     
     mvprintw(8, 0, "WELCOME TO SNAKE");
     mvprintw(10, 0, "Select difficulty:");
@@ -127,6 +127,7 @@ int drawMenu() {
             return HARD;
         case 'q':
             erase();
+            mvprintw(HEIGHT / 2, 0, "Exited game");
             mvprintw(HEIGHT / 2, 0, "Exited game");
             refresh();
             usleep(1000000);
@@ -301,5 +302,5 @@ int main(int argc, char *argv[]) {
     printf("Score : %d\n", score);
     printf("Thanks for playing\n");
 
-    return 0;
+    return 0; 
 }
