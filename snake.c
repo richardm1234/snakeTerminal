@@ -113,7 +113,6 @@ int setDifficulty() {
         case 'q':
             erase();
             mvprintw(HEIGHT / 2, 0, "Exited game");
-            mvprintw(HEIGHT / 2, 0, "Exited game");
             refresh();
             usleep(1000000);
             return -1;
@@ -149,7 +148,6 @@ int firstKeyPress() {
             return 'd';
     }
 }
-/* Draw */
 
 void drawMenu() {
     mvprintw(0, 0, "####### #     #       # #     # #######");
