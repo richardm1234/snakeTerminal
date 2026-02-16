@@ -87,23 +87,8 @@ int leaderboard(int score, const char *path) {
     return EXIT_SUCCESS;
 }
 
-/* Draw */
 
-int drawMenu() {
-    mvprintw(0, 0, "####### #     #       # #     # #######");
-    mvprintw(1, 0, "#       ##    #      ## #    #  #      ");
-    mvprintw(2, 0, "#       # #   #     # # #   #   #      ");
-    mvprintw(3, 0, "####### #  #  #    #  # ####    #######");
-    mvprintw(4, 0, "      # #   # #   ##### #   #   #      ");
-    mvprintw(5, 0, "      # #    ##  #    # #    #  #      ");
-    mvprintw(6, 0, "####### #     # #     # #     # #######");
-    
-    mvprintw(8, 0, "WELCOME TO SNAKE");
-    mvprintw(10, 0, "Select difficulty:");
-    mvprintw(11, 0, "Light(1)");
-    mvprintw(12, 0, "Medium(2)");
-    mvprintw(13, 0, "Hard(3)");
-    refresh();
+int setDifficulty() {
     nodelay(stdscr, FALSE);
     int ch = getch();
     switch (ch) {
@@ -139,31 +124,11 @@ int drawMenu() {
             usleep(1000000);
             return LIGHT;    
     }
-    
 }
 
-void drawBorder(int score) {
-    for (int x = 0; x < WIDTH; x++) {
-        mvaddch(0, x, '#');
-        mvaddch(HEIGHT-1, x, '#');
-    }
-    for (int y = 0; y < HEIGHT; y++) {
-        mvaddch(y, 0, '#');
-        mvaddch(y, WIDTH-1, '#');
-    }
-    mvprintw(0, WIDTH + 1, "Score: %d", score);
-    mvprintw(1, WIDTH + 1, "WASD/ARROWS to move");
-    mvprintw(2, WIDTH + 1, "Press q to quit");
-}
-
-int drawStart(Point *snake, Point *food) {
-    erase();
-    drawBorder(0);
-    mvaddch(snake[0].y, snake[0].x, '@');
-    mvaddch(food->y, food->x, 'F');
-    refresh();
-
-    // temporarily block until a key is pressed
+int firstKeyPress() {
+   // temporarily block until a key is pressed
+    nodelay(stdscr, FALSE);
     int ch = getch();
     switch (ch) {
         case 'w':
@@ -183,7 +148,46 @@ int drawStart(Point *snake, Point *food) {
         default:
             return 'd';
     }
+}
+/* Draw */
+
+void drawMenu() {
+    mvprintw(0, 0, "####### #     #       # #     # #######");
+    mvprintw(1, 0, "#       ##    #      ## #    #  #      ");
+    mvprintw(2, 0, "#       # #   #     # # #   #   #      ");
+    mvprintw(3, 0, "####### #  #  #    #  # ####    #######");
+    mvprintw(4, 0, "      # #   # #   ##### #   #   #      ");
+    mvprintw(5, 0, "      # #    ##  #    # #    #  #      ");
+    mvprintw(6, 0, "####### #     # #     # #     # #######");
+    mvprintw(8, 0, "WELCOME TO SNAKE");
+    mvprintw(10, 0, "Select difficulty:");
+    mvprintw(11, 0, "Light(1)");
+    mvprintw(12, 0, "Medium(2)");
+    mvprintw(13, 0, "Hard(3)");
+    refresh();
         
+}
+
+void drawBorder(int score) {
+    for (int x = 0; x < WIDTH; x++) {
+        mvaddch(0, x, '#');
+        mvaddch(HEIGHT-1, x, '#');
+    }
+    for (int y = 0; y < HEIGHT; y++) {
+        mvaddch(y, 0, '#');
+        mvaddch(y, WIDTH-1, '#');
+    }
+    mvprintw(0, WIDTH + 1, "Score: %d", score);
+    mvprintw(1, WIDTH + 1, "WASD/ARROWS to move");
+    mvprintw(2, WIDTH + 1, "Press q to quit");
+}
+
+void drawStart(Point *snake, Point *food) {
+    erase();
+    drawBorder(0);
+    mvaddch(snake[0].y, snake[0].x, '@');
+    mvaddch(food->y, food->x, 'F');
+    refresh();     
 }
 
 void draw(Point *snake, Point *food, int len, int score) {
@@ -196,6 +200,7 @@ void draw(Point *snake, Point *food, int len, int score) {
     mvaddch(food->y, food->x, 'F');
     refresh();
 }
+
 
 int main(int argc, char *argv[]) {
 
@@ -233,14 +238,15 @@ int main(int argc, char *argv[]) {
         food.y =  rand() % HEIGHT;
     }
 
-    difficulty = drawMenu();
+    drawMenu();
+    difficulty = setDifficulty();
     if (difficulty == -1) {
         endwin();
         printf("Thanks for not playing\n");
         return 0;
     }
-
-    int ch = drawStart(snake, &food);
+    drawStart(snake, &food);
+    int ch = firstKeyPress(); 
     
     nodelay(stdscr, TRUE);
 
