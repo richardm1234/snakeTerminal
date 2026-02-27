@@ -150,6 +150,7 @@ int firstKeyPress() {
 }
 
 void drawMenu() {
+    attron(COLOR_PAIR(1));
     mvprintw(0, 0, "####### #     #       # #     # #######");
     mvprintw(1, 0, "#       ##    #      ## #    #  #      ");
     mvprintw(2, 0, "#       # #   #     # # #   #   #      ");
@@ -157,6 +158,7 @@ void drawMenu() {
     mvprintw(4, 0, "      # #   # #   ##### #   #   #      ");
     mvprintw(5, 0, "      # #    ##  #    # #    #  #      ");
     mvprintw(6, 0, "####### #     # #     # #     # #######");
+    attroff(COLOR_PAIR(1));
     mvprintw(8, 0, "WELCOME TO SNAKE");
     mvprintw(10, 0, "Select difficulty:");
     mvprintw(11, 0, "Light(1)");
@@ -167,6 +169,7 @@ void drawMenu() {
 }
 
 void drawBorder(int score) {
+    attron(COLOR_PAIR(1));
     for (int x = 0; x < WIDTH; x++) {
         mvaddch(0, x, '#');
         mvaddch(HEIGHT-1, x, '#');
@@ -175,6 +178,7 @@ void drawBorder(int score) {
         mvaddch(y, 0, '#');
         mvaddch(y, WIDTH-1, '#');
     }
+    attroff(COLOR_PAIR(1));
     mvprintw(0, WIDTH + 1, "Score: %d", score);
     mvprintw(1, WIDTH + 1, "WASD/ARROWS to move");
     mvprintw(2, WIDTH + 1, "Press q to quit");
@@ -191,10 +195,12 @@ void drawStart(Point *snake, Point *food) {
 void draw(Point *snake, Point *food, int len, int score) {
     erase();
     drawBorder(score);
+    attron(COLOR_PAIR(len%14));
     mvaddch(snake[0].y, snake[0].x, '@');
     for (int i = 1; i < len; i++) {
         mvaddch(snake[i].y, snake[i].x, 'O');
     }
+    attroff(COLOR_PAIR(len%14));
     mvaddch(food->y, food->x, 'F');
     refresh();
 }
@@ -209,6 +215,12 @@ int main(int argc, char *argv[]) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
 
+    start_color();
+    
+    for (short i = 1; i <= 15; i++) {
+        init_pair(i, i, COLOR_BLACK);
+    }
+    
     // game variables
     int difficulty = LIGHT;
     int score = 0;
