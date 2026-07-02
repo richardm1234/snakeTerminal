@@ -234,9 +234,9 @@ void drawFunky(Point *snake, Point *food, int len, int score) {
     drawBorder(score);
     drawBlock(snake[0].y, snake[0].x, (len % 8) + 1);
     for (int i = 1; i < len; i++) {
-        drawBlock(snake[i].y, snake[i].x, (len % 8) + 1);
+        drawBlock(snake[i].y, snake[i].x, (score % 8) + 1);
     }
-    drawBlock(food->y, food->x, (len % 8) + 1);
+    drawBlock(food->y, food->x, ((len + score) % 8) + 1);
     refresh();
 }
 
