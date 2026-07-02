@@ -43,8 +43,6 @@ void eat(Point *snake, Point *food, int *len, int *score) {
     }
 }
 
-
-
 void gameOver(int score, int len) {
     erase();
     mvprintw(HEIGHT / 2, WIDTH / 4, "You got a score of %d and your snake was %d units long\n", score, len);
@@ -77,7 +75,6 @@ int leaderboard(int score, const char *path) {
         name[strcspn(name, "\n")] = '\0';
     }
     
-
     snprintf(line, sizeof(line), "%s %d\n", name, score);
 
     if (fputs(line, scoring) == EOF) {
@@ -149,6 +146,25 @@ int firstKeyPress() {
     }
 }
 
+// initialise color pairs
+void initColors() {
+    init_pair(1, COLOR_WHITE, COLOR_BLACK); // text
+    init_pair(2, COLOR_BLACK, COLOR_GREEN); // snake head
+    init_pair(3, COLOR_BLACK, COLOR_YELLOW); // snake body
+    init_pair(4, COLOR_BLACK, COLOR_RED); // food
+    init_pair(5, COLOR_WHITE, COLOR_WHITE); // border
+}
+
+
+/*** DRAW FUNCTIONS ***/
+
+void drawBlock(int y, int x, int colorPair) {
+    attron(COLOR_PAIR(colorPair));
+    mvaddch(y, x * 2, ' ');
+    mvaddch(y, x * 2 + 1, ' ');
+    attroff(COLOR_PAIR(colorPair));
+}
+
 void drawMenu() {
     attron(COLOR_PAIR(1));
     mvprintw(0, 0, "####### #     #       # #     # #######");
@@ -169,39 +185,36 @@ void drawMenu() {
 }
 
 void drawBorder(int score) {
-    attron(COLOR_PAIR(1));
     for (int x = 0; x < WIDTH; x++) {
-        mvaddch(0, x, '#');
-        mvaddch(HEIGHT-1, x, '#');
+        drawBlock(0, x, 5);
+        drawBlock(HEIGHT-1, x, 5);
     }
     for (int y = 0; y < HEIGHT; y++) {
-        mvaddch(y, 0, '#');
-        mvaddch(y, WIDTH-1, '#');
+        drawBlock(y, 0, 5);
+        drawBlock(y, WIDTH-1, 5);
     }
-    attroff(COLOR_PAIR(1));
-    mvprintw(0, WIDTH + 1, "Score: %d", score);
-    mvprintw(1, WIDTH + 1, "WASD/ARROWS to move");
-    mvprintw(2, WIDTH + 1, "Press q to quit");
+    
+    mvprintw(0, 2*WIDTH + 1, "Score: %d", score);
+    mvprintw(1, 2*WIDTH + 1, "WASD/ARROWS to move");
+    mvprintw(2, 2*WIDTH + 1, "Press q to quit");
 }
 
 void drawStart(Point *snake, Point *food) {
     erase();
     drawBorder(0);
-    mvaddch(snake[0].y, snake[0].x, '@');
-    mvaddch(food->y, food->x, 'F');
+    drawBlock(snake[0].y, snake[0].x, 2);
+    drawBlock(food->y, food->x, 4);
     refresh();     
 }
 
 void draw(Point *snake, Point *food, int len, int score) {
     erase();
     drawBorder(score);
-    attron(COLOR_PAIR(len%14));
-    mvaddch(snake[0].y, snake[0].x, '@');
+    drawBlock(snake[0].y, snake[0].x, 2);
     for (int i = 1; i < len; i++) {
-        mvaddch(snake[i].y, snake[i].x, 'O');
+        drawBlock(snake[i].y, snake[i].x, 3);
     }
-    attroff(COLOR_PAIR(len%14));
-    mvaddch(food->y, food->x, 'F');
+    drawBlock(food->y, food->x, 4);
     refresh();
 }
 
@@ -216,16 +229,14 @@ int main(int argc, char *argv[]) {
     nodelay(stdscr, TRUE);
 
     start_color();
-    
-    for (short i = 1; i <= 15; i++) {
-        init_pair(i, i, COLOR_BLACK);
-    }
+    initColors();
     
     // game variables
     int difficulty = LIGHT;
     int score = 0;
     int collision = 0;
     
+    // Set path to write to
     const char *path;
     if (argc == 2) {
         path = argv[1];
@@ -260,6 +271,7 @@ int main(int argc, char *argv[]) {
     
     nodelay(stdscr, TRUE);
 
+    // Game loop
     while (!collision) {
         
         // Input
@@ -314,6 +326,8 @@ int main(int argc, char *argv[]) {
     nodelay(stdscr, false);
     usleep(1500000);
     endwin();
+
+    // Put score on leaderboard
     leaderboard(score, path);
     printf("Score : %d\n", score);
     printf("Thanks for playing\n");
