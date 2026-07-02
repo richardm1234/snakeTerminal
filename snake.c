@@ -85,7 +85,7 @@ int leaderboard(int score, const char *path) {
 }
 
 
-int setDifficulty() {
+int setDifficulty(bool* funky) {
     nodelay(stdscr, FALSE);
     int ch = getch();
     switch (ch) {
@@ -107,6 +107,23 @@ int setDifficulty() {
             refresh();
             usleep(1000000);
             return HARD;
+        case '4':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Funky");
+            refresh();
+            usleep(1000000);
+            uint32_t val = ((uint32_t) time(NULL) % 3);
+            *funky = true;
+            switch (val) {
+                case 0:
+                    return LIGHT;
+                case 1:
+                    return MEDIUM;
+                case 2:
+                    return HARD;
+                default:
+                    return MEDIUM; 
+            }
         case 'q':
             erase();
             mvprintw(HEIGHT / 2, 0, "Exited game");
@@ -153,6 +170,9 @@ void initColors() {
     init_pair(3, COLOR_BLACK, COLOR_YELLOW); // snake body
     init_pair(4, COLOR_BLACK, COLOR_RED); // food
     init_pair(5, COLOR_WHITE, COLOR_WHITE); // border
+    init_pair(6, COLOR_BLACK, COLOR_CYAN);
+    init_pair(7, COLOR_BLACK, COLOR_MAGENTA);
+    init_pair(8, COLOR_BLACK, COLOR_BLUE);
 }
 
 
@@ -180,6 +200,7 @@ void drawMenu() {
     mvprintw(11, 0, "Light(1)");
     mvprintw(12, 0, "Medium(2)");
     mvprintw(13, 0, "Hard(3)");
+    mvprintw(14, 0, "Funky(4)");
     refresh();
         
 }
@@ -205,6 +226,18 @@ void drawStart(Point *snake, Point *food) {
     drawBlock(snake[0].y, snake[0].x, 2);
     drawBlock(food->y, food->x, 4);
     refresh();     
+}
+
+
+void drawFunky(Point *snake, Point *food, int len, int score) {
+    erase();
+    drawBorder(score);
+    drawBlock(snake[0].y, snake[0].x, (len % 8) + 1);
+    for (int i = 1; i < len; i++) {
+        drawBlock(snake[i].y, snake[i].x, (len % 8) + 1);
+    }
+    drawBlock(food->y, food->x, (len % 8) + 1);
+    refresh();
 }
 
 void draw(Point *snake, Point *food, int len, int score) {
@@ -260,7 +293,8 @@ int main(int argc, char *argv[]) {
     }
 
     drawMenu();
-    difficulty = setDifficulty();
+    bool funky = false;
+    difficulty = setDifficulty(&funky);
     if (difficulty == -1) {
         endwin();
         printf("Thanks for not playing\n");
@@ -318,7 +352,12 @@ int main(int argc, char *argv[]) {
         }
 
         eat(snake, &food, &snakeLength, &score);
-        draw(snake, &food, snakeLength, score);
+        if (funky) {
+            drawFunky(snake, &food, snakeLength, score);
+        } else {
+            draw(snake, &food, snakeLength, score);
+        }
+        
         usleep(difficulty);
     }
     
