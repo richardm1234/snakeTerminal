@@ -40,6 +40,7 @@ void eat(Point *snake, Point *food, int *len, int *score) {
             food->x =  rand() % WIDTH;
             food->y =  rand() % HEIGHT;
         } while (badLocation(snake, food, *len));
+        beep();
     }
 }
 
@@ -185,6 +186,13 @@ void drawBlock(int y, int x, int colorPair) {
     attroff(COLOR_PAIR(colorPair));
 }
 
+void drawHead(int y, int x) {
+    attron(COLOR_PAIR(2));
+    mvaddch(y, x * 2, ':');
+    mvaddch(y, x * 2 + 1, ':');
+    attroff(COLOR_PAIR(2));
+}
+
 void drawMenu() {
     attron(COLOR_PAIR(1));
     mvprintw(0, 0, "####### #     #       # #     # #######");
@@ -232,7 +240,7 @@ void drawStart(Point *snake, Point *food) {
 void drawFunky(Point *snake, Point *food, int len, int score) {
     erase();
     drawBorder(score);
-    drawBlock(snake[0].y, snake[0].x, rand() % 8 + 1);
+    drawHead(snake[0].y, snake[0].x);
     for (int i = 1; i < len; i++) {
         drawBlock(snake[i].y, snake[i].x, rand() % 8 + 1);
     }
@@ -243,9 +251,9 @@ void drawFunky(Point *snake, Point *food, int len, int score) {
 void draw(Point *snake, Point *food, int len, int score) {
     erase();
     drawBorder(score);
-    drawBlock(snake[0].y, snake[0].x, 2);
+    drawHead(snake[0].y, snake[0].x)2;
     for (int i = 1; i < len; i++) {
-        drawBlock(snake[i].y, snake[i].x, 3);
+        drawBlock(snake[i].y, snake[i].x, 2);
     }
     drawBlock(food->y, food->x, 4);
     refresh();
