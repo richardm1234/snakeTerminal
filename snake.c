@@ -5,44 +5,24 @@
 #include <string.h>
 #include <unistd.h>
 
-#define WIDTH 40 // x
-#define HEIGHT 20 // y
+#include "cnn.h"
+#include "dqn.h"
+#include "game.h"
+#include "nn.h"
+#include "qlearn.h"
 
+#define Q_TABLE_PATH "snake_q.bin"
+#define DQN_PATH "snake_dqn.bin"
+#define CNN_PATH "snake_cnn.bin"
 
-typedef struct {
-    int x, y;
-} Point;
+// Who plays when the AI is watched.
+enum Player { HUMAN, AI_TABLE, AI_DQN, AI_CNN };
 
 enum Difficulty {
     LIGHT = 100000,
     MEDIUM = 75000,
     HARD = 50000
 };
-
-int badLocation(Point *snake, Point *food, int len) {
-    for (int i = 0; i < len; i++) {
-        if (food->x == snake[i].x && food->y == snake[i].y) {
-            return 1;
-        }
-    }
-    if (food->x == 0 || food->x == WIDTH-1 || food->y == 0 || food->y == HEIGHT-1) {
-        return 1;
-    }
-    return 0;
-}
-
-void eat(Point *snake, Point *food, int *len, int *score) {
-    if (snake[0].x == food->x && snake[0].y == food->y) {
-        snake[*len] = snake[*len - 1]; // to avoid reading garbage
-        (*len)++;
-        (*score)++;
-        do {
-            food->x =  rand() % WIDTH;
-            food->y =  rand() % HEIGHT;
-        } while (badLocation(snake, food, *len));
-        beep();
-    }
-}
 
 void gameOver(int score, int len) {
     erase();
@@ -86,7 +66,7 @@ int leaderboard(int score, const char *path) {
 }
 
 
-int setDifficulty(bool* funky) {
+int setDifficulty(bool* funky, enum Player* player) {
     nodelay(stdscr, FALSE);
     int ch = getch();
     switch (ch) {
@@ -125,6 +105,27 @@ int setDifficulty(bool* funky) {
                 default:
                     return MEDIUM; 
             }
+        case '5':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Watch AI");
+            refresh();
+            usleep(1000000);
+            *player = AI_TABLE;
+            return MEDIUM;
+        case '6':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Watch DQN");
+            refresh();
+            usleep(1000000);
+            *player = AI_DQN;
+            return MEDIUM;
+        case '7':
+            erase();
+            mvprintw(HEIGHT / 2, 0, "Selected Watch CNN");
+            refresh();
+            usleep(1000000);
+            *player = AI_CNN;
+            return MEDIUM;
         case 'q':
             erase();
             mvprintw(HEIGHT / 2, 0, "Exited game");
@@ -209,6 +210,9 @@ void drawMenu() {
     mvprintw(12, 0, "Medium(2)");
     mvprintw(13, 0, "Hard(3)");
     mvprintw(14, 0, "Funky(4)");
+    mvprintw(15, 0, "Watch AI(5)");
+    mvprintw(16, 0, "Watch DQN(6)");
+    mvprintw(17, 0, "Watch CNN(7)");
     refresh();
         
 }
@@ -251,7 +255,7 @@ void drawFunky(Point *snake, Point *food, int len, int score) {
 void draw(Point *snake, Point *food, int len, int score) {
     erase();
     drawBorder(score);
-    drawHead(snake[0].y, snake[0].x)2;
+    drawHead(snake[0].y, snake[0].x);
     for (int i = 1; i < len; i++) {
         drawBlock(snake[i].y, snake[i].x, 2);
     }
@@ -259,6 +263,67 @@ void draw(Point *snake, Point *food, int len, int score) {
     refresh();
 }
 
+
+void render(Game *g, bool funky) {
+    if (funky) {
+        drawFunky(g->body, &g->food, g->len, g->score);
+    } else {
+        draw(g->body, &g->food, g->len, g->score);
+    }
+}
+
+// A trained agent: picks the next action for the current game.
+typedef Action (*Policy)(const Game *g, const void *agent);
+
+static Action tablePolicy(const Game *g, const void *agent) {
+    return (Action)ql_best((const QTable *)agent, ql_state(g)); // greedy: no exploration
+}
+
+typedef struct {
+    Net net;
+    FeatType feat;
+} DQNAgent;
+
+static Action dqnPolicy(const Game *g, const void *agent) {
+    const DQNAgent *d = agent;
+    float x[FEAT_MAX];
+    dqn_features(d->feat, g, x);
+    return (Action)dqn_best(&d->net, x);
+}
+
+typedef struct {
+    CNN net;
+    CNNCache cache; // cnn_forward's working memory
+} CNNAgent;
+
+static Action cnnPolicy(const Game *g, const void *agent) {
+    CNNAgent *c = (CNNAgent *)agent; // the cache is scratch space, written each call
+    dqn_view(g, c->net.radius, c->cache.x);
+    return (Action)cnn_best(&c->net, c->cache.x, &c->cache);
+}
+
+// Let a trained agent play. Returns the final score.
+int watchAI(Game *g, Policy policy, const void *agent, int delay) {
+    drawStart(g->body, &g->food);
+    nodelay(stdscr, TRUE);
+    while (g->alive) {
+        if (getch() == 'q') {
+            break;
+        }
+        game_step_rel(g, policy(g, agent));
+        if (!g->alive) {
+            break;
+        }
+        if (g->steps_since_food > QL_STARVE_STEPS(g->len)) {
+            break; // stuck in a loop
+        }
+        render(g, false);
+        mvprintw(3, 2*WIDTH + 1, "AI is playing");
+        refresh();
+        usleep(delay);
+    }
+    return g->score;
+}
 
 int main(int argc, char *argv[]) {
 
@@ -271,12 +336,7 @@ int main(int argc, char *argv[]) {
 
     start_color();
     initColors();
-    
-    // game variables
-    int difficulty = LIGHT;
-    int score = 0;
-    int collision = 0;
-    
+
     // Set path to write to
     const char *path;
     if (argc == 2) {
@@ -285,37 +345,92 @@ int main(int argc, char *argv[]) {
         path = "leaderboard.txt";
     }
 
-    // Snake
-    Point snake[100];
-    int snakeLength = 1;
-    snake[0].x = 1 + rand() % (WIDTH - 2);
-    snake[0].y = 1 + rand() % (HEIGHT - 2);
-    int dx = 0, dy = 0;
-
-    // Food
-    Point food = {  rand() % WIDTH, rand() % HEIGHT};
-
-    while (badLocation(snake, &food, snakeLength)) {
-        food.x =  rand() % WIDTH;
-        food.y =  rand() % HEIGHT;
-    }
+    Game g;
+    game_reset(&g, (uint64_t)time(NULL));
 
     drawMenu();
     bool funky = false;
-    difficulty = setDifficulty(&funky);
+    enum Player player = HUMAN;
+    int difficulty = setDifficulty(&funky, &player);
     if (difficulty == -1) {
         endwin();
         printf("Thanks for not playing\n");
         return 0;
     }
-    drawStart(snake, &food);
-    int ch = firstKeyPress(); 
-    
+
+    if (player == AI_TABLE) {
+        static QTable Q;
+        if (!ql_load(&Q, Q_TABLE_PATH)) {
+            endwin();
+            printf("Could not load %s - run ./train first\n", Q_TABLE_PATH);
+            return 1;
+        }
+        watchAI(&g, tablePolicy, &Q, difficulty);
+        gameOver(g.score, g.len);
+        usleep(1500000);
+        endwin();
+        printf("AI score: %d\n", g.score);
+        return 0;
+    }
+
+    if (player == AI_DQN) {
+        DQNAgent d;
+        int feat;
+        if (!nn_load(&d.net, &feat, DQN_PATH)) {
+            endwin();
+            printf("Could not load %s - run ./train_dqn first\n", DQN_PATH);
+            return 1;
+        }
+        d.feat = (FeatType)feat;
+        if (d.net.n[0] != dqn_feature_count(d.feat)) {
+            endwin();
+            printf("%s expects %d inputs, but the %s features have %d now "
+                   "(VIEW_R changed?) - run ./train_dqn again\n", DQN_PATH,
+                   d.net.n[0], dqn_feature_name(d.feat), dqn_feature_count(d.feat));
+            nn_free(&d.net);
+            return 1;
+        }
+        watchAI(&g, dqnPolicy, &d, difficulty);
+        gameOver(g.score, g.len);
+        usleep(1500000);
+        endwin();
+        nn_free(&d.net);
+        printf("DQN score: %d\n", g.score);
+        return 0;
+    }
+
+    if (player == AI_CNN) {
+        CNNAgent c;
+        if (!cnn_load(&c.net, CNN_PATH)) {
+            endwin();
+            printf("Could not load %s - run ./train_cnn first\n", CNN_PATH);
+            return 1;
+        }
+        if (!cnn_cache_init(&c.cache, &c.net)) {
+            endwin();
+            printf("Out of memory\n");
+            cnn_free(&c.net);
+            return 1;
+        }
+        watchAI(&g, cnnPolicy, &c, difficulty);
+        gameOver(g.score, g.len);
+        usleep(1500000);
+        endwin();
+        cnn_cache_free(&c.cache);
+        cnn_free(&c.net);
+        printf("CNN score: %d\n", g.score);
+        return 0;
+    }
+
+    drawStart(g.body, &g.food);
+    int ch = firstKeyPress();
+
     nodelay(stdscr, TRUE);
 
     // Game loop
-    while (!collision) {
-        
+    Dir dir = g.dir;
+    while (g.alive) {
+
         // Input
         int newCh = getch();
         if (newCh != ERR) {
@@ -323,61 +438,49 @@ int main(int argc, char *argv[]) {
         }
         switch (ch) {
             case 'w':
-            case KEY_UP: 
-                dx = 0; dy = -1; 
+            case KEY_UP:
+                dir = DIR_UP;
                 break;
             case 's':
-            case KEY_DOWN: 
-                dx = 0; dy = 1; 
+            case KEY_DOWN:
+                dir = DIR_DOWN;
                 break;
             case 'a':
-            case KEY_LEFT: 
-                dx = -1; dy = 0; 
+            case KEY_LEFT:
+                dir = DIR_LEFT;
                 break;
-            case 'd':    
-            case KEY_RIGHT: 
-                dx = 1; dy = 0; 
+            case 'd':
+            case KEY_RIGHT:
+                dir = DIR_RIGHT;
                 break;
-            case 'q': 
+            case 'q':
                 endwin();
-                printf("Thanks for playing\n"); 
+                printf("Thanks for playing\n");
                 return 0;
         }
 
-        //Move snake
-        for (int i = snakeLength - 1; i > 0; i--) {
-            snake[i] = snake[i - 1];
-        }
-        snake[0].x += dx;
-        snake[0].y += dy;
-
-        // Check collision
-        if (snake[0].x <= 0 || snake[0].x >= WIDTH - 1|| snake[0].y <= 0 || snake[0].y >= HEIGHT - 1) {
+        Event ev = game_step(&g, dir);
+        if (ev == EV_DIED || ev == EV_WON) {
             break;
         }
-        for (int i = 1; i < snakeLength; i++) {
-            if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) collision = 1;
+        if (ev == EV_ATE) {
+            beep();
         }
+        dir = g.dir; // a rejected 180° turn keeps the old heading
 
-        eat(snake, &food, &snakeLength, &score);
-        if (funky) {
-            drawFunky(snake, &food, snakeLength, score);
-        } else {
-            draw(snake, &food, snakeLength, score);
-        }
-        
+        render(&g, funky);
         usleep(difficulty);
     }
-    
-    gameOver(score, snakeLength);
+
+    gameOver(g.score, g.len);
     nodelay(stdscr, false);
-    usleep(1500000);
+    usleep(500000);
     endwin();
 
     // Put score on leaderboard
-    leaderboard(score, path);
-    printf("Score : %d\n", score);
+    leaderboard(g.score, path);
+    printf("Score : %d\n", g.score);
     printf("Thanks for playing\n");
 
-    return 0; 
+    return 0;
 }

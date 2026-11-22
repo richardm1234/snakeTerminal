@@ -58,3 +58,8 @@ dkms.conf
 snake
 
 *.swp
+train
+train_dqn
+train_cnn
+test
+*.bin
