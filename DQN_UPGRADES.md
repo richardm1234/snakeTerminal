@@ -11,6 +11,8 @@ like `main` (same seed, same log, digit for digit).
 | `dqn-nstep` | `--nstep N`, `--gamma G` | what goes into the replay buffer | `dqn.c`, `train_dqn.c` |
 | `dqn-dueling` | `--dueling` | the network's output layer | `nn.c` |
 | `dqn-per` | `--per` | which transitions get replayed | `dqn.c` |
+| `dqn-combined` | all of the above | merges the four branches; adds `--eval GAMES` | |
+| `dqn-starve` | `--starve-penalty P`, `--features hunger` | the reward and one input; see the end | `train_dqn.c`, `dqn.c`, `snake.c` |
 
 ```sh
 git switch dqn-double && make && ./train_dqn --features view --double --seed 1
@@ -205,6 +207,61 @@ stable targets. What's left is mostly outside DQN itself: the reward
 which parts will move away first, and the 19×19 CNN that saw the whole board
 did no better), or a real limit of a greedy one-step policy, which search would
 address.
+
+## Starving: a penalty and a hunger input (`dqn-starve`)
+
+Branch `dqn-starve` builds on `dqn-combined` and adds:
+
+- **`--starve-penalty P`:** starving (no food for 100 × length steps) ends the
+  episode like a death, with reward −P. Without the flag it stays a time
+  limit, with no penalty.
+- **`--features hunger`:** the view plus one input, steps since food ÷ the
+  starvation limit. Without it the network cannot see the limit coming.
+- **In the game:** Watch modes show the same counter ("Hunger: 4 / 300").
+  `./snake --dqn FILE` (or `--cnn FILE`) plays any model without copying it
+  over `snake_dqn.bin`.
+
+5 seeds, 500 evaluation games each, P = 10 (the same as a death):
+
+| Config | Score (seeds 1–5) | Mean |
+|---|---|---:|
+| baseline (from above) | 56.6 / 50.7 / 58.8 / 50.6 / 57.3 | **54.8** |
+| `--starve-penalty 10` | 49.6 / 50.3 / 45.2 / 49.1 / 51.8 | 49.2 |
+| `--features hunger --starve-penalty 10` | 51.3 / 50.2 / 49.3 / 55.7 / 50.4 | 51.4 |
+| hunger + penalty + `--double --nstep 3 --gamma 0.99` | 52.1 / 43.1 / 54.1 / 52.0 / 57.1 | 51.7 |
+| `--gamma 0.99 --starve-penalty 10` | 1.1 / 0.0 / 0.0 / 35.9 / 0.0 | 7.4 |
+
+How the games end, measured over 200 greedy games per model:
+
+| Model | Avg steps | Died | Starved |
+|---|---:|---:|---:|
+| baseline, seed 1 | 1264 | 200 | 0 |
+| `--starve-penalty 10`, seed 1 | 1051 | 200 | 0 |
+| `--gamma 0.99`, seeds 2 and 3 | 101 | 0 | 200 |
+| `--gamma 0.99 --starve-penalty 10`, seeds 2 and 3 | 101 | 0 | 200 |
+
+**A trained snake never starves.** Every game of the good models ends in a
+death, so starving was never what held the score down. The penalty only
+helps where the policy has collapsed into circling, and there it is too
+weak.
+
+**The penalty costs about 5 points.** Starving ends at a moment the view
+can't predict, so those −10 endings add noise to the values. The hunger
+input wins back about 2 of the 5 points. This matches what you'd expect:
+the input makes the ending predictable again, but it doesn't remove the
+cost.
+
+**The penalty does not stop the γ = 0.99 collapse.** The collapsed models
+still circle until they starve, at 101 steps with length 1, and max Q
+reached 165 in one run. That is more than the 10 / (1 − 0.99) = 100 that
+even a meal on every single step would be worth, so it is pure
+overestimation. A −10 penalty can't compete with a value that is wrong by
+150. The fix is Double DQN, not the reward.
+
+**Conclusion.** The plateau is about dying, not starving. The next questions
+are *how* the snake dies (walls or its own body, and how long before that
+the game was already lost), and whether looking a few moves ahead (search)
+avoids those deaths.
 
 To reproduce one row, switch to its branch and run, for example:
 
