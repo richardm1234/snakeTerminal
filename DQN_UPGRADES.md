@@ -253,10 +253,10 @@ cost.
 
 **The penalty does not stop the γ = 0.99 collapse.** The collapsed models
 still circle until they starve, at 101 steps with length 1, and max Q
-reached 165 in one run. That is more than the 10 / (1 − 0.99) = 100 that
-even a meal on every single step would be worth, so it is pure
-overestimation. A −10 penalty can't compete with a value that is wrong by
-150. The fix is Double DQN, not the reward.
+reached 165 in one run. These snakes eat nothing, so their true value is
+at most 0, and below 0 once starving costs −10. Even a snake eating every
+25 steps would only be worth about 35. A −10 penalty can't compete with a
+value that is wrong by 150+. The fix is Double DQN, not the reward.
 
 **Conclusion.** The plateau is about dying, not starving. The next questions
 are *how* the snake dies (walls or its own body, and how long before that
