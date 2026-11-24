@@ -4,6 +4,7 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cnn.h"
@@ -166,6 +167,25 @@ static void test_gradient_check(void) {
     }
     CHECK(worst < 1e-2f);
     nn_free(&net);
+}
+
+static void test_priority_sampling(void) {
+    Replay rb;
+    float s[1] = {0.0f};
+    CHECK(replay_init(&rb, 5, 1));
+    CHECK(replay_enable_priority(&rb, 1.0f)); // alpha 1: proportional
+    for (int i = 0; i < 4; i++) replay_push(&rb, s, 0, 0.0f, s, 0);
+    // Priorities |td| + 0.01: 0.99 + 0.01 = 1, 2, 0, 1 (index 2 nearly never).
+    replay_set_priority(&rb, 0, 0.99f);
+    replay_set_priority(&rb, 1, 1.99f);
+    replay_set_priority(&rb, 2, -0.0f);
+    replay_set_priority(&rb, 3, 0.99f);
+    CHECK(fabs(rb.tree[1] - 4.01) < 1e-6); // the root holds the total
+    int count[4] = {0};
+    for (int k = 0; k < 4000; k++) count[replay_sample(&rb, (k + 0.5) / 4000)]++;
+    CHECK(abs(count[0] - 998) <= 2 && abs(count[1] - 1995) <= 2);
+    CHECK(count[2] <= 11 && abs(count[3] - 998) <= 2);
+    replay_free(&rb);
 }
 
 static void test_dqn_target(void) {
@@ -434,6 +454,7 @@ int main(void) {
     test_state_bits();
     test_q_update();
     test_gradient_check();
+    test_priority_sampling();
     test_dqn_target();
     test_view_is_egocentric();
     test_tail_features();

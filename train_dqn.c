@@ -1,7 +1,10 @@
 /*
  * Headless DQN trainer.
  *
- *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--out snake_dqn.bin]
+ *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--per]
+ *               [--out snake_dqn.bin]
+ *
+ * --per: prioritized experience replay (see DQN_UPGRADES.md).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +30,8 @@
 #define EPS_MIN 0.01f
 #define EPS_DECAY 0.5     // fraction of training over which eps goes 1 -> EPS_MIN
 #define LOG_EVERY 10000
+#define PER_ALPHA 0.6f    // how strongly priorities skew sampling
+#define PER_BETA0 0.4f    // importance correction at the start, annealed to 1
 
 static float reward(Event ev) {
     switch (ev) {
@@ -58,6 +63,7 @@ int main(int argc, char *argv[]) {
     uint64_t seed = (uint64_t)time(NULL);
     FeatType feat = FEAT_SMALL;
     const char *out = "snake_dqn.bin";
+    int per = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
@@ -76,11 +82,13 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "features must be small, view or tail\n");
                 return 1;
             }
+        } else if (!strcmp(argv[i], "--per")) {
+            per = 1;
         } else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
             out = argv[++i];
         } else {
             fprintf(stderr, "usage: %s [--features small|view|tail] [--steps N] "
-                            "[--seed S] [--out FILE]\n", argv[0]);
+                            "[--seed S] [--per] [--out FILE]\n", argv[0]);
             return 1;
         }
     }
@@ -99,14 +107,16 @@ int main(int argc, char *argv[]) {
                         "NN_MAX is %d)\n", nfeat, HIDDEN, NN_MAX);
         return 1;
     }
-    if (!replay_init(&rb, REPLAY_CAP, nfeat)) {
+    if (!replay_init(&rb, REPLAY_CAP, nfeat) ||
+        (per && !replay_enable_priority(&rb, PER_ALPHA))) {
         fprintf(stderr, "not enough memory for the replay buffer\n");
         return 1;
     }
     nn_copy(&target, &online);
 
-    printf("Training %ld steps (features %s: %d inputs, seed %llu)\n", steps,
-           dqn_feature_name(feat), nfeat, (unsigned long long)seed);
+    printf("Training %ld steps (features %s: %d inputs, seed %llu%s)\n", steps,
+           dqn_feature_name(feat), nfeat, (unsigned long long)seed,
+           per ? ", prioritized replay" : "");
     printf("%8s %8s %9s %6s %6s %8s %8s\n", "steps", "episodes", "avg(100)",
            "max", "eps", "loss", "max Q");
 
@@ -147,6 +157,7 @@ int main(int argc, char *argv[]) {
         // 3. learn from a random batch of past transitions
         if (step > WARMUP && step % TRAIN_EVERY == 0) {
             float mq;
+            rb.beta = PER_BETA0 + (1.0f - PER_BETA0) * (float)step / (float)steps;
             loss_sum += dqn_train_batch(&online, &target, &rb, BATCH, GAMMA,
                                         LR, &rng, &mq);
             q_sum += mq;

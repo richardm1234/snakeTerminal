@@ -120,7 +120,49 @@ int replay_init(Replay *rb, int cap, int nfeat) {
     return 1;
 }
 
+#define PRIO_EPS 0.01f // keeps every transition's priority above 0
+
+int replay_enable_priority(Replay *rb, float alpha) {
+    rb->leaves = 1;
+    while (rb->leaves < rb->cap) rb->leaves *= 2;
+    rb->tree = calloc(2 * (size_t)rb->leaves, sizeof(double));
+    rb->alpha = alpha;
+    rb->beta = 1.0f;
+    rb->max_prio = 1.0f;
+    return rb->tree != NULL;
+}
+
+static void tree_set(Replay *rb, int i, double value) {
+    int k = rb->leaves + i;
+    rb->tree[k] = value;
+    for (k /= 2; k >= 1; k /= 2) { // every parent is the sum of its two children
+        rb->tree[k] = rb->tree[2 * k] + rb->tree[2 * k + 1];
+    }
+}
+
+int replay_sample(const Replay *rb, double u) {
+    double x = u * rb->tree[1];
+    int k = 1;
+    while (k < rb->leaves) { // walk down: left if x falls in the left half
+        if (x < rb->tree[2 * k]) {
+            k = 2 * k;
+        } else {
+            x -= rb->tree[2 * k];
+            k = 2 * k + 1;
+        }
+    }
+    int i = k - rb->leaves;
+    return i < rb->size ? i : rb->size - 1; // guard against rounding at the end
+}
+
+void replay_set_priority(Replay *rb, int i, float td_error) {
+    float p = fabsf(td_error) + PRIO_EPS;
+    if (p > rb->max_prio) rb->max_prio = p;
+    tree_set(rb, i, pow(p, rb->alpha));
+}
+
 void replay_free(Replay *rb) {
+    free(rb->tree);
     free(rb->s);
     free(rb->s2);
     free(rb->a);
@@ -154,6 +196,9 @@ void replay_push(Replay *rb, const float *s, int a, float r, const float *s2,
     rb->a[i] = (uint8_t)a;
     rb->r[i] = r;
     rb->done[i] = (uint8_t)done;
+    if (rb->tree) {
+        tree_set(rb, i, pow(rb->max_prio, rb->alpha)); // replayed at least once soon
+    }
     rb->next = (i + 1) % rb->cap; // overwrite the oldest once full
     if (rb->size < rb->cap) {
         rb->size++;
@@ -191,16 +236,43 @@ float dqn_target(float r, int done, float gamma, const float *q_next) {
     return r + gamma * q_next[argmax3(q_next)];
 }
 
-float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
+#define BATCH_MAX 256
+
+float dqn_train_batch(Net *online, const Net *target, Replay *rb,
                       int batch, float gamma, float lr, uint64_t *rng,
                       float *mean_q) {
     static NNCache c, cn;
     float s[FEAT_MAX], s2[FEAT_MAX];
     float loss = 0.0f, qsum = 0.0f;
+    int idx[BATCH_MAX];
+    float weight[BATCH_MAX];
+
+    if (batch > BATCH_MAX) batch = BATCH_MAX;
+    if (rb->tree) {
+        // Split the total priority into `batch` equal slices and take one
+        // sample from each. Rare high-priority transitions come up more
+        // often, so their gradient is scaled down by the importance weight
+        // (size * P(i))^-beta, normalised so the largest weight is 1.
+        double total = rb->tree[1];
+        float wmax = 0.0f;
+        for (int k = 0; k < batch; k++) {
+            double u = (k + game_rand(rng) / 4294967296.0) / batch;
+            idx[k] = replay_sample(rb, u);
+            double prob = rb->tree[rb->leaves + idx[k]] / total;
+            weight[k] = (float)pow(rb->size * prob, -rb->beta);
+            if (weight[k] > wmax) wmax = weight[k];
+        }
+        for (int k = 0; k < batch; k++) weight[k] /= wmax;
+    } else {
+        for (int k = 0; k < batch; k++) {
+            idx[k] = (int)(game_rand(rng) % (uint32_t)rb->size);
+            weight[k] = 1.0f;
+        }
+    }
 
     nn_zero_grad(online);
     for (int k = 0; k < batch; k++) {
-        int i = (int)(game_rand(rng) % (uint32_t)rb->size);
+        int i = idx[k];
         replay_get(rb, i, s, s2);
         int a = rb->a[i];
 
@@ -216,13 +288,16 @@ float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
         // Huber loss: squared for small errors, linear for large ones, so a
         // single surprising transition can't produce a huge gradient.
         float d = q[a] - y;
+        if (rb->tree) {
+            replay_set_priority(rb, i, d);
+        }
         if (fabsf(d) <= 1.0f) {
-            loss += 0.5f * d * d;
+            loss += weight[k] * 0.5f * d * d;
         } else {
-            loss += fabsf(d) - 0.5f;
+            loss += weight[k] * (fabsf(d) - 0.5f);
             d = d > 0.0f ? 1.0f : -1.0f; // the slope of the linear part
         }
-        nn_backward(online, &c, a, d);
+        nn_backward(online, &c, a, weight[k] * d);
     }
     nn_adam_step(online, lr, batch);
 
