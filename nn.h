@@ -22,6 +22,7 @@ typedef struct {
     float *mw[NN_LAYERS], *mb[NN_LAYERS]; // Adam: running mean of gradients
     float *vw[NN_LAYERS], *vb[NN_LAYERS]; // Adam: running mean of squared gradients
     int t;                                // Adam: number of steps taken
+    int dueling;                          // see nn_init_dueling
     float *mem;                           // one allocation holding all of the above
 } Net;
 
@@ -34,6 +35,13 @@ typedef struct {
 // Allocate and randomly initialise. Returns 0 on failure.
 int nn_init(Net *net, int inputs, int hidden, int outputs, uint64_t *rng);
 void nn_free(Net *net);
+
+// Dueling network: the last layer computes `actions` advantages A(s, a) plus
+// one state value V(s), and the outputs are
+//     Q(s, a) = V(s) + A(s, a) - mean_b A(s, b).
+// After nn_forward, a[NN_LAYERS][0 .. actions-1] are the Q-values (exactly
+// like a plain net) and a[NN_LAYERS][actions] is V(s).
+int nn_init_dueling(Net *net, int inputs, int hidden, int actions, uint64_t *rng);
 
 void nn_forward(const Net *net, const float *x, NNCache *c);
 

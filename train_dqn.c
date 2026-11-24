@@ -1,7 +1,10 @@
 /*
  * Headless DQN trainer.
  *
- *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--out snake_dqn.bin]
+ *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--dueling]
+ *               [--out snake_dqn.bin]
+ *
+ * --dueling: a dueling output layer, Q = V + A - mean(A) (see DQN_UPGRADES.md).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +61,7 @@ int main(int argc, char *argv[]) {
     uint64_t seed = (uint64_t)time(NULL);
     FeatType feat = FEAT_SMALL;
     const char *out = "snake_dqn.bin";
+    int dueling = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
@@ -76,11 +80,13 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "features must be small, view or tail\n");
                 return 1;
             }
+        } else if (!strcmp(argv[i], "--dueling")) {
+            dueling = 1;
         } else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
             out = argv[++i];
         } else {
             fprintf(stderr, "usage: %s [--features small|view|tail] [--steps N] "
-                            "[--seed S] [--out FILE]\n", argv[0]);
+                            "[--seed S] [--dueling] [--out FILE]\n", argv[0]);
             return 1;
         }
     }
@@ -93,8 +99,9 @@ int main(int argc, char *argv[]) {
     int nfeat = dqn_feature_count(feat);
     Net online, target;
     Replay rb;
-    if (!nn_init(&online, nfeat, HIDDEN, QL_ACTIONS, &rng) ||
-        !nn_init(&target, nfeat, HIDDEN, QL_ACTIONS, &rng)) {
+    int (*init)(Net *, int, int, int, uint64_t *) = dueling ? nn_init_dueling : nn_init;
+    if (!init(&online, nfeat, HIDDEN, QL_ACTIONS, &rng) ||
+        !init(&target, nfeat, HIDDEN, QL_ACTIONS, &rng)) {
         fprintf(stderr, "could not create the network (%d inputs, %d hidden; "
                         "NN_MAX is %d)\n", nfeat, HIDDEN, NN_MAX);
         return 1;
@@ -105,8 +112,9 @@ int main(int argc, char *argv[]) {
     }
     nn_copy(&target, &online);
 
-    printf("Training %ld steps (features %s: %d inputs, seed %llu)\n", steps,
-           dqn_feature_name(feat), nfeat, (unsigned long long)seed);
+    printf("Training %ld steps (features %s: %d inputs, seed %llu%s)\n", steps,
+           dqn_feature_name(feat), nfeat, (unsigned long long)seed,
+           dueling ? ", dueling" : "");
     printf("%8s %8s %9s %6s %6s %8s %8s\n", "steps", "episodes", "avg(100)",
            "max", "eps", "loss", "max Q");
 

@@ -168,6 +168,56 @@ static void test_gradient_check(void) {
     nn_free(&net);
 }
 
+static void test_dueling_gradient_check(void) {
+    uint64_t rng = 11;
+    Net net;
+    CHECK(nn_init_dueling(&net, 4, 6, 3, &rng));
+    for (int l = 0; l < NN_LAYERS; l++) {
+        for (int o = 0; o < net.n[l + 1]; o++) {
+            net.b[l][o] = 0.1f;
+        }
+    }
+    float x[4] = {0.5f, -1.0f, 0.25f, 1.0f};
+    NNCache c;
+    nn_forward(&net, x, &c);
+    float *q = c.a[NN_LAYERS];
+    // Q - V must average to 0 over the actions.
+    CHECK(fabsf((q[0] + q[1] + q[2]) / 3.0f - q[3]) < 1e-5f);
+
+    int a = 2;
+    float y = -1.0f;
+    nn_zero_grad(&net);
+    nn_backward(&net, &c, a, q[a] - y);
+    const float h = 1e-2f;
+    float worst = 0.0f;
+    for (int l = 0; l < NN_LAYERS; l++) {
+        for (int i = 0; i < net.n[l + 1] * net.n[l]; i++) {
+            float keep = net.w[l][i];
+            net.w[l][i] = keep + h;
+            float up = grad_check_loss(&net, x, a, y);
+            net.w[l][i] = keep - h;
+            float down = grad_check_loss(&net, x, a, y);
+            net.w[l][i] = keep;
+            float diff = fabsf((up - down) / (2 * h) - net.gw[l][i]);
+            if (diff > worst) worst = diff;
+        }
+    }
+    CHECK(worst < 1e-2f);
+
+    // Saving and loading keeps the dueling head (the game loads it like any net).
+    Net back;
+    int tag = 0;
+    CHECK(nn_save(&net, 1, "test_dueling.bin"));
+    CHECK(nn_load(&back, &tag, "test_dueling.bin"));
+    remove("test_dueling.bin");
+    NNCache c2;
+    nn_forward(&net, x, &c);
+    nn_forward(&back, x, &c2);
+    CHECK(back.dueling && tag == 1 && fabsf(c.a[NN_LAYERS][a] - c2.a[NN_LAYERS][a]) < 1e-6f);
+    nn_free(&back);
+    nn_free(&net);
+}
+
 static void test_dqn_target(void) {
     float q_next[3] = {1.0f, 4.0f, 2.0f};
     CHECK(fabsf(dqn_target(1.0f, 0, 0.5f, q_next) - 3.0f) < 1e-6f); // 1 + 0.5 * 4
@@ -434,6 +484,7 @@ int main(void) {
     test_state_bits();
     test_q_update();
     test_gradient_check();
+    test_dueling_gradient_check();
     test_dqn_target();
     test_view_is_egocentric();
     test_tail_features();

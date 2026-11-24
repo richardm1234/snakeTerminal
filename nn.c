@@ -8,6 +8,7 @@
 #include "game.h" // game_rand
 
 static const char NN_MAGIC[8] = "SNAKENN";
+static const char NN_MAGIC_DUELING[8] = "SNAKEND";
 
 #define ADAM_B1 0.9f
 #define ADAM_B2 0.999f
@@ -61,6 +62,14 @@ int nn_init(Net *net, int inputs, int hidden, int outputs, uint64_t *rng) {
     return 1;
 }
 
+int nn_init_dueling(Net *net, int inputs, int hidden, int actions, uint64_t *rng) {
+    if (!nn_init(net, inputs, hidden, actions + 1, rng)) { // +1 for V(s)
+        return 0;
+    }
+    net->dueling = 1;
+    return 1;
+}
+
 void nn_free(Net *net) {
     free(net->mem);
     memset(net, 0, sizeof(*net));
@@ -84,6 +93,14 @@ void nn_forward(const Net *net, const float *x, NNCache *c) {
             out[o] = (l < NN_LAYERS - 1 && sum < 0.0f) ? 0.0f : sum;
         }
     }
+    if (net->dueling) {
+        float *q = c->a[NN_LAYERS];
+        int na = net->n[NN_LAYERS] - 1;
+        float v = q[na], mean = 0.0f;
+        for (int a = 0; a < na; a++) mean += q[a];
+        mean /= (float)na;
+        for (int a = 0; a < na; a++) q[a] = v + q[a] - mean;
+    }
 }
 
 void nn_backward(Net *net, const NNCache *c, int action, float dq) {
@@ -91,7 +108,17 @@ void nn_backward(Net *net, const NNCache *c, int action, float dq) {
     // At the top, only the output for `action` was used in the loss.
     float delta[NN_MAX] = {0};
     float prev[NN_MAX];
-    delta[action] = dq;
+    if (net->dueling) {
+        // Q(action) = V + A(action) - mean(A), so
+        //   dQ(action)/dV = 1,  dQ(action)/dA(b) = [b == action] - 1/na.
+        int na = net->n[NN_LAYERS] - 1;
+        for (int b = 0; b < na; b++) {
+            delta[b] = dq * ((b == action ? 1.0f : 0.0f) - 1.0f / (float)na);
+        }
+        delta[na] = dq;
+    } else {
+        delta[action] = dq;
+    }
 
     for (int l = NN_LAYERS - 1; l >= 0; l--) {
         int nin = net->n[l], nout = net->n[l + 1];
@@ -183,7 +210,8 @@ int nn_save(const Net *net, int tag, const char *path) {
     if (!f) {
         return 0;
     }
-    int ok = fwrite(NN_MAGIC, sizeof(NN_MAGIC), 1, f) == 1 &&
+    int ok = fwrite(net->dueling ? NN_MAGIC_DUELING : NN_MAGIC,
+                    sizeof(NN_MAGIC), 1, f) == 1 &&
              fwrite(&tag, sizeof(tag), 1, f) == 1 &&
              fwrite(net->n, sizeof(net->n), 1, f) == 1;
     for (int l = 0; ok && l < NN_LAYERS; l++) {
@@ -204,11 +232,16 @@ int nn_load(Net *net, int *tag, const char *path) {
     char magic[sizeof(NN_MAGIC)];
     int n[NN_LAYERS + 1];
     uint64_t rng = 1;
-    int ok = fread(magic, sizeof(magic), 1, f) == 1 &&
-             memcmp(magic, NN_MAGIC, sizeof(magic)) == 0 &&
-             fread(tag, sizeof(*tag), 1, f) == 1 &&
-             fread(n, sizeof(n), 1, f) == 1 &&
-             n[1] == n[2] && nn_init(net, n[0], n[1], n[3], &rng);
+    int ok = fread(magic, sizeof(magic), 1, f) == 1;
+    int dueling = ok && memcmp(magic, NN_MAGIC_DUELING, sizeof(magic)) == 0;
+    ok = ok && (dueling || memcmp(magic, NN_MAGIC, sizeof(magic)) == 0) &&
+         fread(tag, sizeof(*tag), 1, f) == 1 &&
+         fread(n, sizeof(n), 1, f) == 1 &&
+         n[1] == n[2] && (dueling ? n[3] >= 2 : 1) &&
+         nn_init(net, n[0], n[1], n[3], &rng);
+    if (ok) {
+        net->dueling = dueling;
+    }
     for (int l = 0; ok && l < NN_LAYERS; l++) {
         ok = fread(net->w[l], sizeof(float), layer_weights(net, l), f) ==
                  (size_t)layer_weights(net, l) &&
