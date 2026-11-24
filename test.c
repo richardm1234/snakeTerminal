@@ -251,6 +251,20 @@ static void test_double_target(void) {
     CHECK(fabsf(dqn_target_double(-10.0f, 1, 0.5f, q_online, q_target) + 10.0f) < 1e-6f);
 }
 
+static void test_hunger_feature(void) {
+    Game g;
+    float x[FEAT_MAX];
+    game_reset(&g, 3);
+    CHECK(dqn_features(FEAT_HUNGER, &g, x) == FEAT_HUNGER_N);
+    CHECK(x[FEAT_VIEW_N] == 0.0f); // just started: not hungry
+    g.steps_since_food = QL_STARVE_STEPS(g.len) / 2;
+    dqn_features(FEAT_HUNGER, &g, x);
+    CHECK(fabsf(x[FEAT_VIEW_N] - 0.5f) < 1e-6f);
+    g.steps_since_food = QL_STARVE_STEPS(g.len) + 1; // past the limit: capped at 1
+    dqn_features(FEAT_HUNGER, &g, x);
+    CHECK(x[FEAT_VIEW_N] == 1.0f);
+}
+
 static void test_nstep_return(void) {
     float r[3] = {1.0f, 0.0f, 10.0f};
     CHECK(fabsf(dqn_nstep_return(r, 3, 0.5f) - 3.5f) < 1e-6f); // 1 + 0 + 0.25 * 10
@@ -522,6 +536,7 @@ int main(void) {
     test_dqn_target();
     test_double_target();
     test_nstep_return();
+    test_hunger_feature();
     test_view_is_egocentric();
     test_tail_features();
     test_cnn_gradient_check();

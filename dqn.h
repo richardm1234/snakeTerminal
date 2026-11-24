@@ -16,7 +16,8 @@
 typedef enum {
     FEAT_SMALL, // the same 14 bits as the Q-table (ql_state), as 0/1 floats
     FEAT_VIEW,  // a window around the head, rotated so "up" is the heading
-    FEAT_TAIL   // FEAT_VIEW plus where the tail is
+    FEAT_TAIL,  // FEAT_VIEW plus where the tail is
+    FEAT_HUNGER // FEAT_VIEW plus how close the snake is to starving
 } FeatType;
 
 #define VIEW_R 4                   // window radius: 2R+1 cells across (4 gives 9 x 9)
@@ -29,7 +30,10 @@ typedef enum {
 #define FEAT_VIEW_N DQN_VIEW_COUNT(VIEW_R)
 // + tail ahead/behind/left/right + distance to the tail
 #define FEAT_TAIL_N (FEAT_VIEW_N + 5)
+// + hunger: steps since food / the starvation limit (0 after eating, 1 = starving)
+#define FEAT_HUNGER_N (FEAT_VIEW_N + 1)
 #define FEAT_MAX FEAT_TAIL_N
+_Static_assert(FEAT_HUNGER_N <= FEAT_MAX, "FEAT_MAX must fit every feature set");
 
 // The inputs are a layer of the network, and layers can be at most NN_MAX wide.
 _Static_assert(FEAT_MAX <= NN_MAX,

@@ -8,6 +8,7 @@ int dqn_feature_count(FeatType f) {
     switch (f) {
         case FEAT_VIEW: return FEAT_VIEW_N;
         case FEAT_TAIL: return FEAT_TAIL_N;
+        case FEAT_HUNGER: return FEAT_HUNGER_N;
         default:        return FEAT_SMALL_N;
     }
 }
@@ -16,6 +17,7 @@ const char *dqn_feature_name(FeatType f) {
     switch (f) {
         case FEAT_VIEW: return "view";
         case FEAT_TAIL: return "tail";
+        case FEAT_HUNGER: return "hunger";
         default:        return "small";
     }
 }
@@ -96,10 +98,21 @@ static int tail_features(const Game *g, float *x) {
     return FEAT_TAIL_N;
 }
 
+// The view plus one number: how far the snake is through its starvation
+// limit. Without it, starving would end episodes at a moment the network
+// cannot see coming.
+static int hunger_features(const Game *g, float *x) {
+    view_features(g, x);
+    float h = (float)g->steps_since_food / (float)QL_STARVE_STEPS(g->len);
+    x[FEAT_VIEW_N] = h < 1.0f ? h : 1.0f;
+    return FEAT_HUNGER_N;
+}
+
 int dqn_features(FeatType f, const Game *g, float *x) {
     switch (f) {
         case FEAT_VIEW: return view_features(g, x);
         case FEAT_TAIL: return tail_features(g, x);
+        case FEAT_HUNGER: return hunger_features(g, x);
         default:        return small_features(g, x);
     }
 }

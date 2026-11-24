@@ -319,6 +319,9 @@ int watchAI(Game *g, Policy policy, const void *agent, int delay) {
         }
         render(g, false);
         mvprintw(3, 2*WIDTH + 1, "AI is playing");
+        // How close it is to the starvation limit, which ends the game.
+        mvprintw(4, 2*WIDTH + 1, "Hunger: %d / %d   ", g->steps_since_food,
+                 QL_STARVE_STEPS(g->len));
         refresh();
         usleep(delay);
     }
@@ -326,6 +329,22 @@ int watchAI(Game *g, Policy policy, const void *agent, int delay) {
 }
 
 int main(int argc, char *argv[]) {
+    // ./snake [--dqn FILE] [--cnn FILE] [leaderboard file]
+    const char *path = "leaderboard.txt";
+    const char *dqn_path = DQN_PATH, *cnn_path = CNN_PATH;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--dqn") && i + 1 < argc) {
+            dqn_path = argv[++i];
+        } else if (!strcmp(argv[i], "--cnn") && i + 1 < argc) {
+            cnn_path = argv[++i];
+        } else if (argv[i][0] != '-') {
+            path = argv[i];
+        } else {
+            fprintf(stderr, "usage: %s [--dqn FILE] [--cnn FILE] [leaderboard]\n",
+                    argv[0]);
+            return 1;
+        }
+    }
 
     srand(time(NULL));
     initscr();
@@ -336,14 +355,6 @@ int main(int argc, char *argv[]) {
 
     start_color();
     initColors();
-
-    // Set path to write to
-    const char *path;
-    if (argc == 2) {
-        path = argv[1];
-    } else {
-        path = "leaderboard.txt";
-    }
 
     Game g;
     game_reset(&g, (uint64_t)time(NULL));
@@ -376,16 +387,16 @@ int main(int argc, char *argv[]) {
     if (player == AI_DQN) {
         DQNAgent d;
         int feat;
-        if (!nn_load(&d.net, &feat, DQN_PATH)) {
+        if (!nn_load(&d.net, &feat, dqn_path)) {
             endwin();
-            printf("Could not load %s - run ./train_dqn first\n", DQN_PATH);
+            printf("Could not load %s - run ./train_dqn first\n", dqn_path);
             return 1;
         }
         d.feat = (FeatType)feat;
         if (d.net.n[0] != dqn_feature_count(d.feat)) {
             endwin();
             printf("%s expects %d inputs, but the %s features have %d now "
-                   "(VIEW_R changed?) - run ./train_dqn again\n", DQN_PATH,
+                   "(VIEW_R changed?) - run ./train_dqn again\n", dqn_path,
                    d.net.n[0], dqn_feature_name(d.feat), dqn_feature_count(d.feat));
             nn_free(&d.net);
             return 1;
@@ -401,9 +412,9 @@ int main(int argc, char *argv[]) {
 
     if (player == AI_CNN) {
         CNNAgent c;
-        if (!cnn_load(&c.net, CNN_PATH)) {
+        if (!cnn_load(&c.net, cnn_path)) {
             endwin();
-            printf("Could not load %s - run ./train_cnn first\n", CNN_PATH);
+            printf("Could not load %s - run ./train_cnn first\n", cnn_path);
             return 1;
         }
         if (!cnn_cache_init(&c.cache, &c.net)) {

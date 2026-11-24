@@ -1,7 +1,7 @@
 /*
  * Headless DQN trainer.
  *
- *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S]
+ *   ./train_dqn [--features small|view|tail|hunger] [--steps N] [--seed S]
  *               [--double] [--nstep N] [--gamma G] [--dueling] [--per]
  *               [--eval GAMES] [--out snake_dqn.bin]
  *
@@ -96,8 +96,10 @@ int main(int argc, char *argv[]) {
                 feat = FEAT_VIEW;
             } else if (!strcmp(argv[i], "tail")) {
                 feat = FEAT_TAIL;
+            } else if (!strcmp(argv[i], "hunger")) {
+                feat = FEAT_HUNGER;
             } else {
-                fprintf(stderr, "features must be small, view or tail\n");
+                fprintf(stderr, "features must be small, view, tail or hunger\n");
                 return 1;
             }
         } else if (!strcmp(argv[i], "--double")) {
@@ -117,7 +119,7 @@ int main(int argc, char *argv[]) {
         } else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
             out = argv[++i];
         } else {
-            fprintf(stderr, "usage: %s [--features small|view|tail] [--steps N] "
+            fprintf(stderr, "usage: %s [--features small|view|tail|hunger] [--steps N] "
                             "[--seed S] [--double] [--nstep N] [--gamma G] "
                             "[--dueling] [--per] [--starve-penalty P] "
                             "[--eval GAMES] [--out FILE]\n",
