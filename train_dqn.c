@@ -12,6 +12,9 @@
  *   --dueling  a dueling output layer, Q = V + A - mean(A)
  *   --per      prioritized experience replay
  * --eval GAMES sets how many games the final evaluation plays (default 100).
+ * --starve-penalty P: starving (no food for 100 * length steps) ends the
+ *   episode like a death, with reward -P. The default 0 keeps the old rule:
+ *   starving is a time limit, with no penalty and no "done".
  */
 #include <math.h>
 #include <stdio.h>
@@ -78,6 +81,7 @@ int main(int argc, char *argv[]) {
     int dueling = 0;
     int per = 0;
     int eval_games = 100;
+    float starve_penalty = 0.0f;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
@@ -106,6 +110,8 @@ int main(int argc, char *argv[]) {
             dueling = 1;
         } else if (!strcmp(argv[i], "--per")) {
             per = 1;
+        } else if (!strcmp(argv[i], "--starve-penalty") && i + 1 < argc) {
+            starve_penalty = (float)atof(argv[++i]);
         } else if (!strcmp(argv[i], "--eval") && i + 1 < argc) {
             eval_games = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
@@ -113,7 +119,8 @@ int main(int argc, char *argv[]) {
         } else {
             fprintf(stderr, "usage: %s [--features small|view|tail] [--steps N] "
                             "[--seed S] [--double] [--nstep N] [--gamma G] "
-                            "[--dueling] [--per] [--eval GAMES] [--out FILE]\n",
+                            "[--dueling] [--per] [--starve-penalty P] "
+                            "[--eval GAMES] [--out FILE]\n",
                     argv[0]);
             return 1;
         }
@@ -155,10 +162,10 @@ int main(int argc, char *argv[]) {
     nn_copy(&target, &online);
 
     printf("Training %ld steps (features %s: %d inputs, seed %llu, "
-           "%d-step, gamma %.3f%s%s%s)\n", steps, dqn_feature_name(feat), nfeat,
-           (unsigned long long)seed, nstep, gamma,
-           double_dqn ? ", double DQN" : "", dueling ? ", dueling" : "",
-           per ? ", prioritized replay" : "");
+           "%d-step, gamma %.3f%s%s%s, starve penalty %g)\n", steps,
+           dqn_feature_name(feat), nfeat, (unsigned long long)seed, nstep,
+           gamma, double_dqn ? ", double DQN" : "", dueling ? ", dueling" : "",
+           per ? ", prioritized replay" : "", starve_penalty);
     printf("%8s %8s %9s %6s %6s %8s %8s\n", "steps", "episodes", "avg(100)",
            "max", "eps", "loss", "max Q");
 
@@ -188,9 +195,15 @@ int main(int argc, char *argv[]) {
         Event ev = game_step_rel(&g, (Action)a);
         dqn_features(feat, &g, s2);
         int done = (ev == EV_DIED || ev == EV_WON);
+        int starved = !done && g.steps_since_food > QL_STARVE_STEPS(g.len);
+        float r = reward(ev);
+        if (starved && starve_penalty != 0.0f) {
+            r = -starve_penalty; // starving now counts as a real ending
+            done = 1;
+        }
         memcpy(pend_s[pend_n], s, sizeof(float) * nfeat);
         pend_a[pend_n] = a;
-        pend_r[pend_n] = reward(ev);
+        pend_r[pend_n] = r;
         pend_n++;
         if (done) {
             // The episode ended: every waiting transition gets the rewards up
@@ -212,10 +225,11 @@ int main(int argc, char *argv[]) {
         }
         memcpy(s, s2, sizeof(float) * nfeat);
 
-        // Starvation is a time limit, not a real game over (see train.c),
-        // so it ends the episode without being stored as done. Transitions
-        // still waiting for their nstep rewards are dropped.
-        if (done || g.steps_since_food > QL_STARVE_STEPS(g.len)) {
+        // Without --starve-penalty, starvation is a time limit, not a real
+        // game over (see train.c), so it ends the episode without being
+        // stored as done. Transitions still waiting for their nstep rewards
+        // are dropped.
+        if (done || starved) {
             pend_n = 0;
             recent[episodes % 100] = g.score;
             if (g.score > best) best = g.score;
