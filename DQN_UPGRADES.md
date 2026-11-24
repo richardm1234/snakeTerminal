@@ -187,8 +187,9 @@ like `main`, so the baseline below was re-run with the same binary: 5 seeds,
 **Double DQN fixes the γ = 0.99 blow-up.** All 5 seeds learn normally. With
 γ = 0.99 alone, 2 of 3 collapsed, and with n-step alone 1 of 3 fell to 34.
 Max Q stays at about 17 throughout. That is plausible for γ = 0.99 rather
-than inflated: eating every ~25 steps is worth roughly
-10 / (1 − 0.99²⁵) ≈ 45 in the long run.
+than inflated: eating every ~25 steps, forever, is worth
+10 · 0.99²⁵ / (1 − 0.99²⁵) ≈ 35, and real games end. The same sum with
+γ = 0.95 gives ≈ 4, which is exactly the baseline's max Q.
 
 **The longer horizon does not raise the plateau.** The combination is
 4.5 points below the baseline. With a seed-to-seed spread of about ±4 that is
