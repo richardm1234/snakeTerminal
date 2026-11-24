@@ -68,10 +68,16 @@ int dqn_act(const Net *net, const float *x, float eps, uint64_t *rng);
 // Bellman target: r if the episode really ended, else r + gamma * max_a q_next[a].
 float dqn_target(float r, int done, float gamma, const float *q_next);
 
+// Double DQN target: the online network picks the next action, the target
+// network says what it is worth: r + gamma * q_target[argmax_a q_online[a]].
+float dqn_target_double(float r, int done, float gamma,
+                        const float *q_next_online, const float *q_next_target);
+
 // Sample a batch, take one gradient step on `online`. Returns the mean loss;
 // if mean_q is not NULL it receives the mean of max_a Q(s, a) over the batch.
+// double_dqn != 0 uses dqn_target_double instead of dqn_target.
 float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
-                      int batch, float gamma, float lr, uint64_t *rng,
-                      float *mean_q);
+                      int batch, float gamma, float lr, int double_dqn,
+                      uint64_t *rng, float *mean_q);
 
 #endif

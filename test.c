@@ -174,6 +174,13 @@ static void test_dqn_target(void) {
     CHECK(fabsf(dqn_target(-10.0f, 1, 0.5f, q_next) + 10.0f) < 1e-6f); // done: no bootstrap
 }
 
+static void test_double_target(void) {
+    float q_online[3] = {0.0f, 1.0f, 5.0f}; // online prefers action 2
+    float q_target[3] = {9.0f, 4.0f, 2.0f}; // target's own max would be 9
+    CHECK(fabsf(dqn_target_double(1.0f, 0, 0.5f, q_online, q_target) - 2.0f) < 1e-6f);
+    CHECK(fabsf(dqn_target_double(-10.0f, 1, 0.5f, q_online, q_target) + 10.0f) < 1e-6f);
+}
+
 // Window cell `fwd` steps ahead and `right` steps to the right of the head.
 static int view_cell(int fwd, int right) {
     return (VIEW_R - fwd) * VIEW_W + (VIEW_R + right);
@@ -435,6 +442,7 @@ int main(void) {
     test_q_update();
     test_gradient_check();
     test_dqn_target();
+    test_double_target();
     test_view_is_egocentric();
     test_tail_features();
     test_cnn_gradient_check();

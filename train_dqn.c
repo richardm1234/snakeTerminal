@@ -1,7 +1,10 @@
 /*
  * Headless DQN trainer.
  *
- *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--out snake_dqn.bin]
+ *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--double]
+ *               [--out snake_dqn.bin]
+ *
+ * --double: Double DQN targets (see DQN_UPGRADES.md).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +61,7 @@ int main(int argc, char *argv[]) {
     uint64_t seed = (uint64_t)time(NULL);
     FeatType feat = FEAT_SMALL;
     const char *out = "snake_dqn.bin";
+    int double_dqn = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
@@ -76,11 +80,13 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "features must be small, view or tail\n");
                 return 1;
             }
+        } else if (!strcmp(argv[i], "--double")) {
+            double_dqn = 1;
         } else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
             out = argv[++i];
         } else {
             fprintf(stderr, "usage: %s [--features small|view|tail] [--steps N] "
-                            "[--seed S] [--out FILE]\n", argv[0]);
+                            "[--seed S] [--double] [--out FILE]\n", argv[0]);
             return 1;
         }
     }
@@ -105,8 +111,9 @@ int main(int argc, char *argv[]) {
     }
     nn_copy(&target, &online);
 
-    printf("Training %ld steps (features %s: %d inputs, seed %llu)\n", steps,
-           dqn_feature_name(feat), nfeat, (unsigned long long)seed);
+    printf("Training %ld steps (features %s: %d inputs, seed %llu%s)\n", steps,
+           dqn_feature_name(feat), nfeat, (unsigned long long)seed,
+           double_dqn ? ", double DQN" : "");
     printf("%8s %8s %9s %6s %6s %8s %8s\n", "steps", "episodes", "avg(100)",
            "max", "eps", "loss", "max Q");
 
@@ -148,7 +155,7 @@ int main(int argc, char *argv[]) {
         if (step > WARMUP && step % TRAIN_EVERY == 0) {
             float mq;
             loss_sum += dqn_train_batch(&online, &target, &rb, BATCH, GAMMA,
-                                        LR, &rng, &mq);
+                                        LR, double_dqn, &rng, &mq);
             q_sum += mq;
             loss_n++;
         }

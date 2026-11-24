@@ -191,10 +191,18 @@ float dqn_target(float r, int done, float gamma, const float *q_next) {
     return r + gamma * q_next[argmax3(q_next)];
 }
 
+float dqn_target_double(float r, int done, float gamma,
+                        const float *q_next_online, const float *q_next_target) {
+    if (done) {
+        return r;
+    }
+    return r + gamma * q_next_target[argmax3(q_next_online)];
+}
+
 float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
-                      int batch, float gamma, float lr, uint64_t *rng,
-                      float *mean_q) {
-    static NNCache c, cn;
+                      int batch, float gamma, float lr, int double_dqn,
+                      uint64_t *rng, float *mean_q) {
+    static NNCache c, cn, co;
     float s[FEAT_MAX], s2[FEAT_MAX];
     float loss = 0.0f, qsum = 0.0f;
 
@@ -207,7 +215,14 @@ float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
         // The target comes from the *target* network and is treated as a
         // constant: no gradient flows through it.
         nn_forward(target, s2, &cn);
-        float y = dqn_target(rb->r[i], rb->done[i], gamma, cn.a[NN_LAYERS]);
+        float y;
+        if (double_dqn) {
+            nn_forward(online, s2, &co);
+            y = dqn_target_double(rb->r[i], rb->done[i], gamma,
+                                  co.a[NN_LAYERS], cn.a[NN_LAYERS]);
+        } else {
+            y = dqn_target(rb->r[i], rb->done[i], gamma, cn.a[NN_LAYERS]);
+        }
 
         nn_forward(online, s, &c);
         float *q = c.a[NN_LAYERS];
