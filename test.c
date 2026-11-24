@@ -4,6 +4,7 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cnn.h"
@@ -168,6 +169,75 @@ static void test_gradient_check(void) {
     nn_free(&net);
 }
 
+static void test_dueling_gradient_check(void) {
+    uint64_t rng = 11;
+    Net net;
+    CHECK(nn_init_dueling(&net, 4, 6, 3, &rng));
+    for (int l = 0; l < NN_LAYERS; l++) {
+        for (int o = 0; o < net.n[l + 1]; o++) {
+            net.b[l][o] = 0.1f;
+        }
+    }
+    float x[4] = {0.5f, -1.0f, 0.25f, 1.0f};
+    NNCache c;
+    nn_forward(&net, x, &c);
+    float *q = c.a[NN_LAYERS];
+    // Q - V must average to 0 over the actions.
+    CHECK(fabsf((q[0] + q[1] + q[2]) / 3.0f - q[3]) < 1e-5f);
+
+    int a = 2;
+    float y = -1.0f;
+    nn_zero_grad(&net);
+    nn_backward(&net, &c, a, q[a] - y);
+    const float h = 1e-2f;
+    float worst = 0.0f;
+    for (int l = 0; l < NN_LAYERS; l++) {
+        for (int i = 0; i < net.n[l + 1] * net.n[l]; i++) {
+            float keep = net.w[l][i];
+            net.w[l][i] = keep + h;
+            float up = grad_check_loss(&net, x, a, y);
+            net.w[l][i] = keep - h;
+            float down = grad_check_loss(&net, x, a, y);
+            net.w[l][i] = keep;
+            float diff = fabsf((up - down) / (2 * h) - net.gw[l][i]);
+            if (diff > worst) worst = diff;
+        }
+    }
+    CHECK(worst < 1e-2f);
+
+    // Saving and loading keeps the dueling head (the game loads it like any net).
+    Net back;
+    int tag = 0;
+    CHECK(nn_save(&net, 1, "test_dueling.bin"));
+    CHECK(nn_load(&back, &tag, "test_dueling.bin"));
+    remove("test_dueling.bin");
+    NNCache c2;
+    nn_forward(&net, x, &c);
+    nn_forward(&back, x, &c2);
+    CHECK(back.dueling && tag == 1 && fabsf(c.a[NN_LAYERS][a] - c2.a[NN_LAYERS][a]) < 1e-6f);
+    nn_free(&back);
+    nn_free(&net);
+}
+
+static void test_priority_sampling(void) {
+    Replay rb;
+    float s[1] = {0.0f};
+    CHECK(replay_init(&rb, 5, 1));
+    CHECK(replay_enable_priority(&rb, 1.0f)); // alpha 1: proportional
+    for (int i = 0; i < 4; i++) replay_push(&rb, s, 0, 0.0f, s, 0);
+    // Priorities |td| + 0.01: 0.99 + 0.01 = 1, 2, 0, 1 (index 2 nearly never).
+    replay_set_priority(&rb, 0, 0.99f);
+    replay_set_priority(&rb, 1, 1.99f);
+    replay_set_priority(&rb, 2, -0.0f);
+    replay_set_priority(&rb, 3, 0.99f);
+    CHECK(fabs(rb.tree[1] - 4.01) < 1e-6); // the root holds the total
+    int count[4] = {0};
+    for (int k = 0; k < 4000; k++) count[replay_sample(&rb, (k + 0.5) / 4000)]++;
+    CHECK(abs(count[0] - 998) <= 2 && abs(count[1] - 1995) <= 2);
+    CHECK(count[2] <= 11 && abs(count[3] - 998) <= 2);
+    replay_free(&rb);
+}
+
 static void test_dqn_target(void) {
     float q_next[3] = {1.0f, 4.0f, 2.0f};
     CHECK(fabsf(dqn_target(1.0f, 0, 0.5f, q_next) - 3.0f) < 1e-6f); // 1 + 0.5 * 4
@@ -179,6 +249,12 @@ static void test_double_target(void) {
     float q_target[3] = {9.0f, 4.0f, 2.0f}; // target's own max would be 9
     CHECK(fabsf(dqn_target_double(1.0f, 0, 0.5f, q_online, q_target) - 2.0f) < 1e-6f);
     CHECK(fabsf(dqn_target_double(-10.0f, 1, 0.5f, q_online, q_target) + 10.0f) < 1e-6f);
+}
+
+static void test_nstep_return(void) {
+    float r[3] = {1.0f, 0.0f, 10.0f};
+    CHECK(fabsf(dqn_nstep_return(r, 3, 0.5f) - 3.5f) < 1e-6f); // 1 + 0 + 0.25 * 10
+    CHECK(fabsf(dqn_nstep_return(r, 1, 0.5f) - 1.0f) < 1e-6f); // 1-step: just r
 }
 
 // Window cell `fwd` steps ahead and `right` steps to the right of the head.
@@ -441,8 +517,11 @@ int main(void) {
     test_state_bits();
     test_q_update();
     test_gradient_check();
+    test_dueling_gradient_check();
+    test_priority_sampling();
     test_dqn_target();
     test_double_target();
+    test_nstep_return();
     test_view_is_egocentric();
     test_tail_features();
     test_cnn_gradient_check();

@@ -53,9 +53,23 @@ typedef struct {
     uint8_t *s, *s2; // cap * nfeat each
     uint8_t *a, *done;
     float *r;
+    // Prioritized replay (off while tree is NULL): a sum tree over
+    // priority^alpha, so sampling in proportion to priority is O(log cap).
+    double *tree;     // 2 * leaves; tree[1] is the total, leaf i is tree[leaves + i]
+    int leaves;       // cap rounded up to a power of two
+    float alpha;      // 0 = uniform, 1 = fully proportional to |TD error|
+    float beta;       // importance-sampling correction, annealed to 1 by the trainer
+    float max_prio;   // new transitions get the largest priority seen so far
 } Replay;
 
 int replay_init(Replay *rb, int cap, int nfeat);
+// Switch on prioritized sampling. Call right after replay_init.
+int replay_enable_priority(Replay *rb, float alpha);
+// Index of the transition whose slice of the total priority contains
+// u * total (u in [0, 1)).
+int replay_sample(const Replay *rb, double u);
+// Set transition i's priority from its TD error.
+void replay_set_priority(Replay *rb, int i, float td_error);
 void replay_free(Replay *rb);
 void replay_push(Replay *rb, const float *s, int a, float r, const float *s2,
                  int done);
@@ -72,11 +86,15 @@ float dqn_target(float r, int done, float gamma, const float *q_next);
 // network says what it is worth: r + gamma * q_target[argmax_a q_online[a]].
 float dqn_target_double(float r, int done, float gamma,
                         const float *q_next_online, const float *q_next_target);
+// n-step return: r[0] + gamma r[1] + ... + gamma^(n-1) r[n-1]. Stored in the
+// replay buffer in place of a single reward; the bootstrap then uses gamma^n.
+float dqn_nstep_return(const float *r, int n, float gamma);
 
 // Sample a batch, take one gradient step on `online`. Returns the mean loss;
 // if mean_q is not NULL it receives the mean of max_a Q(s, a) over the batch.
 // double_dqn != 0 uses dqn_target_double instead of dqn_target.
-float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
+// With a prioritized buffer it also updates the sampled priorities.
+float dqn_train_batch(Net *online, const Net *target, Replay *rb,
                       int batch, float gamma, float lr, int double_dqn,
                       uint64_t *rng, float *mean_q);
 

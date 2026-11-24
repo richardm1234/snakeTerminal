@@ -1,11 +1,19 @@
 /*
  * Headless DQN trainer.
  *
- *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S] [--double]
- *               [--out snake_dqn.bin]
+ *   ./train_dqn [--features small|view|tail] [--steps N] [--seed S]
+ *               [--double] [--nstep N] [--gamma G] [--dueling] [--per]
+ *               [--eval GAMES] [--out snake_dqn.bin]
  *
- * --double: Double DQN targets (see DQN_UPGRADES.md).
+ * The upgrades (all off by default, see DQN_UPGRADES.md):
+ *   --double   Double DQN targets
+ *   --nstep N  store N-step returns instead of 1-step rewards
+ *   --gamma G  discount (default 0.95)
+ *   --dueling  a dueling output layer, Q = V + A - mean(A)
+ *   --per      prioritized experience replay
+ * --eval GAMES sets how many games the final evaluation plays (default 100).
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +28,8 @@
 #define REWARD_DEATH -10.0f
 
 #define HIDDEN 128        // neurons per hidden layer
-#define GAMMA 0.95f
+#define GAMMA 0.95f       // default; --gamma changes it
+#define NSTEP_MAX 32
 #define LR 1e-3f          // Adam learning rate
 #define BATCH 32
 #define REPLAY_CAP 50000  // transitions kept in the replay buffer
@@ -30,6 +39,8 @@
 #define EPS_MIN 0.01f
 #define EPS_DECAY 0.5     // fraction of training over which eps goes 1 -> EPS_MIN
 #define LOG_EVERY 10000
+#define PER_ALPHA 0.6f    // how strongly priorities skew sampling
+#define PER_BETA0 0.4f    // importance correction at the start, annealed to 1
 
 static float reward(Event ev) {
     switch (ev) {
@@ -62,6 +73,11 @@ int main(int argc, char *argv[]) {
     FeatType feat = FEAT_SMALL;
     const char *out = "snake_dqn.bin";
     int double_dqn = 0;
+    int nstep = 1;
+    float gamma = GAMMA;
+    int dueling = 0;
+    int per = 0;
+    int eval_games = 100;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
@@ -82,14 +98,39 @@ int main(int argc, char *argv[]) {
             }
         } else if (!strcmp(argv[i], "--double")) {
             double_dqn = 1;
+        } else if (!strcmp(argv[i], "--nstep") && i + 1 < argc) {
+            nstep = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--gamma") && i + 1 < argc) {
+            gamma = (float)atof(argv[++i]);
+        } else if (!strcmp(argv[i], "--dueling")) {
+            dueling = 1;
+        } else if (!strcmp(argv[i], "--per")) {
+            per = 1;
+        } else if (!strcmp(argv[i], "--eval") && i + 1 < argc) {
+            eval_games = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--out") && i + 1 < argc) {
             out = argv[++i];
         } else {
             fprintf(stderr, "usage: %s [--features small|view|tail] [--steps N] "
-                            "[--seed S] [--double] [--out FILE]\n", argv[0]);
+                            "[--seed S] [--double] [--nstep N] [--gamma G] "
+                            "[--dueling] [--per] [--eval GAMES] [--out FILE]\n",
+                    argv[0]);
             return 1;
         }
     }
+    if (eval_games < 1) {
+        fprintf(stderr, "eval must be at least 1 game\n");
+        return 1;
+    }
+    if (nstep < 1 || nstep > NSTEP_MAX) {
+        fprintf(stderr, "nstep must be between 1 and %d\n", NSTEP_MAX);
+        return 1;
+    }
+    if (gamma <= 0.0f || gamma >= 1.0f) {
+        fprintf(stderr, "gamma must be between 0 and 1\n");
+        return 1;
+    }
+    float gamma_n = powf(gamma, (float)nstep); // discount for the bootstrap
     if (steps <= WARMUP) {
         fprintf(stderr, "steps must be more than %d\n", WARMUP);
         return 1;
@@ -99,21 +140,25 @@ int main(int argc, char *argv[]) {
     int nfeat = dqn_feature_count(feat);
     Net online, target;
     Replay rb;
-    if (!nn_init(&online, nfeat, HIDDEN, QL_ACTIONS, &rng) ||
-        !nn_init(&target, nfeat, HIDDEN, QL_ACTIONS, &rng)) {
+    int (*init)(Net *, int, int, int, uint64_t *) = dueling ? nn_init_dueling : nn_init;
+    if (!init(&online, nfeat, HIDDEN, QL_ACTIONS, &rng) ||
+        !init(&target, nfeat, HIDDEN, QL_ACTIONS, &rng)) {
         fprintf(stderr, "could not create the network (%d inputs, %d hidden; "
                         "NN_MAX is %d)\n", nfeat, HIDDEN, NN_MAX);
         return 1;
     }
-    if (!replay_init(&rb, REPLAY_CAP, nfeat)) {
+    if (!replay_init(&rb, REPLAY_CAP, nfeat) ||
+        (per && !replay_enable_priority(&rb, PER_ALPHA))) {
         fprintf(stderr, "not enough memory for the replay buffer\n");
         return 1;
     }
     nn_copy(&target, &online);
 
-    printf("Training %ld steps (features %s: %d inputs, seed %llu%s)\n", steps,
-           dqn_feature_name(feat), nfeat, (unsigned long long)seed,
-           double_dqn ? ", double DQN" : "");
+    printf("Training %ld steps (features %s: %d inputs, seed %llu, "
+           "%d-step, gamma %.3f%s%s%s)\n", steps, dqn_feature_name(feat), nfeat,
+           (unsigned long long)seed, nstep, gamma,
+           double_dqn ? ", double DQN" : "", dueling ? ", dueling" : "",
+           per ? ", prioritized replay" : "");
     printf("%8s %8s %9s %6s %6s %8s %8s\n", "steps", "episodes", "avg(100)",
            "max", "eps", "loss", "max Q");
 
@@ -125,6 +170,11 @@ int main(int argc, char *argv[]) {
 
     Game g;
     float s[FEAT_MAX], s2[FEAT_MAX];
+    // The last `nstep` (state, action, reward) triples that are not in the
+    // replay buffer yet. pend_n of them, oldest first at index 0.
+    static float pend_s[NSTEP_MAX][FEAT_MAX];
+    int pend_a[NSTEP_MAX], pend_n = 0;
+    float pend_r[NSTEP_MAX];
     game_reset(&g, new_seed(&rng));
     dqn_features(feat, &g, s);
 
@@ -138,12 +188,35 @@ int main(int argc, char *argv[]) {
         Event ev = game_step_rel(&g, (Action)a);
         dqn_features(feat, &g, s2);
         int done = (ev == EV_DIED || ev == EV_WON);
-        replay_push(&rb, s, a, reward(ev), s2, done);
+        memcpy(pend_s[pend_n], s, sizeof(float) * nfeat);
+        pend_a[pend_n] = a;
+        pend_r[pend_n] = reward(ev);
+        pend_n++;
+        if (done) {
+            // The episode ended: every waiting transition gets the rewards up
+            // to the end (fewer than nstep of them) and no bootstrap.
+            for (int k = 0; k < pend_n; k++) {
+                replay_push(&rb, pend_s[k], pend_a[k],
+                            dqn_nstep_return(pend_r + k, pend_n - k, gamma),
+                            s2, 1);
+            }
+            pend_n = 0;
+        } else if (pend_n == nstep) {
+            // The oldest one now has nstep rewards and a state nstep later.
+            replay_push(&rb, pend_s[0], pend_a[0],
+                        dqn_nstep_return(pend_r, nstep, gamma), s2, 0);
+            pend_n--;
+            memmove(pend_s[0], pend_s[1], sizeof(pend_s[0]) * pend_n);
+            memmove(pend_a, pend_a + 1, sizeof(int) * pend_n);
+            memmove(pend_r, pend_r + 1, sizeof(float) * pend_n);
+        }
         memcpy(s, s2, sizeof(float) * nfeat);
 
         // Starvation is a time limit, not a real game over (see train.c),
-        // so it ends the episode without being stored as done.
+        // so it ends the episode without being stored as done. Transitions
+        // still waiting for their nstep rewards are dropped.
         if (done || g.steps_since_food > QL_STARVE_STEPS(g.len)) {
+            pend_n = 0;
             recent[episodes % 100] = g.score;
             if (g.score > best) best = g.score;
             episodes++;
@@ -154,7 +227,8 @@ int main(int argc, char *argv[]) {
         // 3. learn from a random batch of past transitions
         if (step > WARMUP && step % TRAIN_EVERY == 0) {
             float mq;
-            loss_sum += dqn_train_batch(&online, &target, &rb, BATCH, GAMMA,
+            rb.beta = PER_BETA0 + (1.0f - PER_BETA0) * (float)step / (float)steps;
+            loss_sum += dqn_train_batch(&online, &target, &rb, BATCH, gamma_n,
                                         LR, double_dqn, &rng, &mq);
             q_sum += mq;
             loss_n++;
@@ -180,15 +254,16 @@ int main(int argc, char *argv[]) {
     printf("Training took %.1f s\n", (double)(clock() - start) / CLOCKS_PER_SEC);
 
     int sum_greedy = 0, max_greedy = 0, sum_random = 0;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < eval_games; i++) {
         int sg = eval_episode(&online, feat, 0.0f, &rng);
         sum_greedy += sg;
         if (sg > max_greedy) max_greedy = sg;
         sum_random += eval_episode(&online, feat, 1.0f, &rng);
     }
-    printf("\nGreedy eval over 100 games: avg %.2f, max %d\n",
-           sum_greedy / 100.0, max_greedy);
-    printf("Random policy for comparison: avg %.2f\n", sum_random / 100.0);
+    printf("\nGreedy eval over %d games: avg %.2f, max %d\n", eval_games,
+           (double)sum_greedy / eval_games, max_greedy);
+    printf("Random policy for comparison: avg %.2f\n",
+           (double)sum_random / eval_games);
 
     int ok = nn_save(&online, (int)feat, out);
     if (ok) {
