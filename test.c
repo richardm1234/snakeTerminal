@@ -174,6 +174,12 @@ static void test_dqn_target(void) {
     CHECK(fabsf(dqn_target(-10.0f, 1, 0.5f, q_next) + 10.0f) < 1e-6f); // done: no bootstrap
 }
 
+static void test_nstep_return(void) {
+    float r[3] = {1.0f, 0.0f, 10.0f};
+    CHECK(fabsf(dqn_nstep_return(r, 3, 0.5f) - 3.5f) < 1e-6f); // 1 + 0 + 0.25 * 10
+    CHECK(fabsf(dqn_nstep_return(r, 1, 0.5f) - 1.0f) < 1e-6f); // 1-step: just r
+}
+
 // Window cell `fwd` steps ahead and `right` steps to the right of the head.
 static int view_cell(int fwd, int right) {
     return (VIEW_R - fwd) * VIEW_W + (VIEW_R + right);
@@ -435,6 +441,7 @@ int main(void) {
     test_q_update();
     test_gradient_check();
     test_dqn_target();
+    test_nstep_return();
     test_view_is_egocentric();
     test_tail_features();
     test_cnn_gradient_check();

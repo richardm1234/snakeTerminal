@@ -231,3 +231,11 @@ float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
     }
     return loss / batch;
 }
+
+float dqn_nstep_return(const float *r, int n, float gamma) {
+    float sum = 0.0f;
+    for (int k = n - 1; k >= 0; k--) {
+        sum = r[k] + gamma * sum;
+    }
+    return sum;
+}

@@ -68,6 +68,10 @@ int dqn_act(const Net *net, const float *x, float eps, uint64_t *rng);
 // Bellman target: r if the episode really ended, else r + gamma * max_a q_next[a].
 float dqn_target(float r, int done, float gamma, const float *q_next);
 
+// n-step return: r[0] + gamma r[1] + ... + gamma^(n-1) r[n-1]. Stored in the
+// replay buffer in place of a single reward; the bootstrap then uses gamma^n.
+float dqn_nstep_return(const float *r, int n, float gamma);
+
 // Sample a batch, take one gradient step on `online`. Returns the mean loss;
 // if mean_q is not NULL it receives the mean of max_a Q(s, a) over the batch.
 float dqn_train_batch(Net *online, const Net *target, const Replay *rb,
